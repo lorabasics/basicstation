@@ -1,0 +1,499 @@
+// Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
+//
+// This file is subject to the terms and conditions defined in file 'LICENSE',
+// which is part of this source code package.
+
+#if defined(CFG_nogps)
+
+#include "rt.h"
+
+int sys_enableGPS (str_t _device) {
+    LOG(MOD_GPS|ERROR, "GPS function not compiled.");
+    return 0;
+}
+
+#else // ! defined(CFG_nogps)
+
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <termios.h>
+
+#include "s2conf.h"
+#include "rt.h"
+#include "tc.h"
+#include "sys_linux.h"
+
+
+#if defined(CFG_ubx)
+// We don't need UBX to operate station - we get time from server
+// under the assumption both station and server are synced to a PPS.
+// station infers the time label of a PPS pulse with the help of the server (see timesync.c)
+// UBX code is still here in case we might need it again.
+#define UBX_SYN1 (0xB5)
+#define UBX_SYN2 (0x62)
+
+static u1_t UBX_EN_NAVTIMEGPS[] = {
+    UBX_SYN1, UBX_SYN2,
+    0x06, 0x01, // class/ID
+    0x08, 0x00, // payload length
+    0x01, 0x20, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, // Enable NAV-TIMEGPS output on serial
+    0x32, 0x94 // checksum
+};
+#endif // defined(CFG_ubx)
+
+
+typedef struct termios tio_t;
+
+static u1_t   isTTY;
+static u1_t   garbageCnt;
+static str_t  device;
+static int    ubx;
+static int    baud;
+static aio_t* aio;
+static tio_t  saved_tio;
+static int    gpsfill;
+static u1_t   gpsline[1024];
+static tmr_t  reopen_tmr;
+static double last_lat, last_lon, last_alt, last_dilution;
+static double orig_lat, orig_lon, from_lat, from_lon;
+static int    last_satellites;
+static int    last_quality;
+
+static str_t const lastpos_filename = "~temp/station.lastpos";
+static int      report_move;
+static int      last_reported_fix;
+static int      nofix_backoff;
+static ustime_t time_fixchange;
+
+
+#if defined(CFG_ubx)
+static u2_t fletcher8 (u1_t* data, int len) {
+    u1_t a=0, b=0;
+    for( int i=0; i<len; i++) {
+        a += data[i];
+        b += a;
+    }
+    return a | (b<<8);
+}
+#endif // defined(CFG_ubx)
+
+
+static int nmea_cksum ( u1_t* data, int len) {
+    if( data[0] != '$' )
+        return 0;
+    int v = 0;
+    for( int i=1; i<len; i++ ) {
+        if( data[i] == '*' ) {
+            int s = (rt_hexDigit(data[i+1]) << 4) | rt_hexDigit(data[i+2]);
+            if( s!=v)
+                LOG(MOD_GPS|ERROR,"NMEA checksum error: %02X vs %02X", s, v);
+            return s==v;
+        }
+        v ^= data[i];
+    }
+    return 0;
+}
+
+
+static int nmea_str (char** pp, int cnt, char** args) {
+    char* p = *pp;
+    int c, i = 0;
+    c = p[0];
+    while( i < cnt ) {
+        if( c == '*' )
+            return 0;
+        args[i] = p;
+        while( (c=p[0]) != ',' && c != '*' )
+            p++;
+        *p++ = 0;
+        i += 1;
+    }
+    *pp = p;
+    return 1;
+}
+
+
+static int nmea_decimal(char** pp, sL_t* pv) {
+    char* p = *pp;
+    if( p[0] == '*' )
+        return 0;
+    int sign = 0;
+    if( *p == '-' ) {
+        p++;
+        sign = 1;
+    }
+    uL_t v = rt_readDec((str_t*)&p);
+    if( *pp + sign == p )
+        return 0;
+    if( *p != ',' && *p != '*' )
+        return 0;
+    *pp = p+1;
+    *pv = (sL_t)((sign?-1:1)*v);
+    return 1;
+}
+
+
+static int nmea_float(char** pp, double* pv) {
+    char* p = *pp;
+    if( p[0] == '*' )
+        return 0;
+    int sign = 0;
+    if( *p == '-' ) {
+        p++;
+        sign = 1;
+    }
+    uL_t p10 = 1;
+    uL_t w = 0;
+    uL_t v = rt_readDec((str_t*)&p);
+    if( *pp + sign == p )
+        return 0;
+    if( *p == '.' ) {
+        char* f = ++p;
+        w = rt_readDec((str_t*)&f);
+        while( p < f ) {
+            p++;
+            p10 *= 10;
+        }
+    }
+    if( *p != ',' && *p != '*' )
+        return 0;
+    *pp = p+1;
+    *pv = (double)((sign?-1:1)*v) + (double)w/p10;
+    return 1;
+}
+
+
+static int check_tolerance (double a, double b, double thres) {
+    double d = a-b;
+    return d<=-thres || thres<=d;
+}
+
+
+static int send_alarm (str_t fmt, ...) {
+    if( !TC )
+        return 0;
+    ujbuf_t sendbuf = (*TC->s2ctx.getSendbuf)(&TC->s2ctx, MIN_UPJSON_SIZE);
+    if( sendbuf.buf == NULL )
+        return 0;
+    va_list ap;
+    va_start(ap, fmt);
+    int ok = vxprintf(&sendbuf, fmt, ap);
+    va_end(ap);
+    if( !ok ) {
+        LOG(MOD_GPS|ERROR, "JSON encoding of alarm exceeds available buffer space: %d", sendbuf.bufsize);
+        return 0;
+    }
+    (*TC->s2ctx.sendText)(&TC->s2ctx, &sendbuf);
+    return 1;
+}
+
+
+static void nmea_gga (char* p) {
+    double time_of_fix, lat, lon, dilution, alt;
+    char *latD, *lonD;
+    sL_t quality, satellites;
+    if( !nmea_float  (&p, &time_of_fix) ||
+        !nmea_float  (&p, &lat) ||
+        !nmea_str    (&p, 1, &latD) ||
+        !nmea_float  (&p, &lon) ||
+        !nmea_str    (&p, 1, &lonD) ||
+        !nmea_decimal(&p, &quality) ||
+        !nmea_decimal(&p, &satellites) ||
+        !nmea_float  (&p, &dilution) ||
+        !nmea_float  (&p, &alt) ) {
+        LOG(MOD_GPS|ERROR, "Failed to parse GPS GGA sentence: %s", p);
+        return;
+    }
+    s4_t lati = (s4_t)lat/100;
+    lat = (latD[0] == 'E' ? -1 : 1) * lati +  (lat - lati*100)/60.0;
+    s4_t loni = (s4_t)lon/100;
+    lon = (lonD[0] == 'S' ? -1 : 1) * loni +  (lon - loni*100)/60.0;
+
+    if( (quality == 0) ^ (last_quality == 0) )
+        time_fixchange = rt_getTime();
+
+    int fix = (quality == 0 ? -1 : 1);
+    ustime_t now = rt_getTime();
+    ustime_t delay = GPS_REPORT_DELAY;
+    if( last_reported_fix <= 0 && fix > 0 && now > time_fixchange + delay &&
+        send_alarm("{\"msgtype\":\"alarm\","
+                   "\"text\":\"GPS fix: %.7f,%.7f alt=%.1f dilution=%f satellites=%d quality=%d\"}",
+                   lat, lon, alt, dilution, satellites, quality) ) {
+        last_reported_fix = fix;
+        nofix_backoff = 0;
+    }
+    if( fix < 0 ) {
+        ustime_t thres = time_fixchange + (1<<nofix_backoff)*delay;
+        if( now > thres &&
+            send_alarm("{\"msgtype\":\"alarm\","
+                       "\"text\":\"No GPS fix since %~T\"}", time_fixchange-now) ){
+            last_reported_fix = fix;
+            nofix_backoff = max(nofix_backoff+1, 16);
+        }
+    }
+
+    if( quality > 0 ) {
+        if( check_tolerance(orig_lat, lat, 0.001) ||
+            check_tolerance(orig_lon, lon, 0.002) ) {
+            // GW changed position
+            char json[100];
+            dbuf_t jbuf = dbuf_ini(json);
+            xprintf(&jbuf, "[%.6f,%.6f]", lat, lon);
+            sys_writeFile(lastpos_filename, &jbuf);
+            if( !report_move ) {
+                from_lat = orig_lat;
+                from_lon = orig_lon;
+            }
+            orig_lat = last_lat = lat;
+            orig_lon = last_lon = lon;
+            report_move = 1;
+        }
+        last_alt = alt;
+        last_dilution = dilution;
+        last_quality = quality;
+        last_satellites = satellites;
+    }
+    last_quality = quality;
+
+    if( report_move &&
+        send_alarm("{\"msgtype\":\"alarm\","
+                   "\"text\":\"GPS move %.7f,%.7f => %.7f,%.7f (alt=%.1f dilution=%f satellites=%d quality=%d)\"}",
+                   from_lat, from_lon, orig_lat, orig_lon, alt, dilution, satellites, quality) ) {
+        report_move = 0;
+    }
+}
+
+
+// Fwd decl
+static int gps_reopen ();
+
+static void reopen_timeout (tmr_t* tmr) {
+    if( tmr == NULL || !gps_reopen() )
+        rt_setTimer(&reopen_tmr, rt_micros_ahead(isTTY ? GPS_REOPEN_TTY_INTV : GPS_REOPEN_FIFO_INTV));
+}
+
+
+static void gps_read(aio_t* _aio) {
+    assert(aio == _aio);
+    int n, done = 0;
+    while(1) {
+        n = read(aio->fd, gpsline+gpsfill, sizeof(gpsline)-gpsfill);
+        if( n == 0 ) {
+            // EOF
+            aio_close(aio);
+            aio = NULL;
+            reopen_timeout(NULL);
+            return;
+        }
+        if( n == -1 ) {
+            if( errno == EAGAIN )
+                return;
+            rt_fatal("Failed to read GPS data from '%s': %s", device, strerror(errno));
+        }
+        gpsfill = n = gpsfill + n;
+        for( int i=0; i<n; i++ ) {
+            if( gpsline[i] == '\n' ) {
+                if( nmea_cksum(gpsline, i) ) {
+                    LOG(MOD_GPS|XDEBUG, "GPS: %.*s", i+1, &gpsline[done]);
+                    if( gpsline[done+0] == '$' && gpsline[done+3] == 'G' &&
+                        gpsline[done+4] == 'G' && gpsline[done+5] == 'A' && gpsline[done+6] == ',' ) {
+                        nmea_gga((char*)gpsline+7);
+                    }
+                }
+                else {
+                    if( garbageCnt == 0 ) {
+                        LOG(MOD_GPS|WARNING, "GPS garbage: %.*s", i+1, &gpsline[done]);
+                    } else {
+                        garbageCnt -= 1;  // 1st few sentences might be garbage
+                    }
+                }
+                done = i+1;
+                break;
+            }
+#if defined(CFG_ubx)
+            if( gpsline[i] == UBX_SYN1 && i+1 < n && gpsline[i+1] == UBX_SYN2 ) {
+                if( i+6 > n )
+                    break; // need more data to read header
+                u2_t ubxlen = rt_rlsbf2(&gpsline[i+4]);
+                if( i + ubxlen + 8 > n )
+                    break;
+                u2_t cksum = rt_rlsbf2(&gpsline[i+6+ubxlen]);
+                u2_t fltch = fletcher8(&gpsline[i+2], ubxlen+4);
+                LOG(MOD_GPS|DEBUG, "UBX cksum=%04X vs found=%04X", cksum, fltch);
+                if( cksum != fltch ) {
+                    done = i+1;
+                    break;
+                }
+                done = i+8+ubxlen;
+                if( gpsline[i+2] == 0x01 && gpsline[i+3] == 0x20 && ubxlen == 16 ) {
+                    u4_t tow      = rt_rlsbf4(&gpsline[i+6]);    // GPS time of week in ms
+                    u4_t tow_ns   = rt_rlsbf4(&gpsline[i+6+4]);
+                    u2_t week     = rt_rlsbf2(&gpsline[i+6+4+2]);
+                    u1_t leapsecs = gpsline[i+6+4+2+0];
+                    u1_t status   = gpsline[i+6+4+2+1];
+                    u4_t tacc     = rt_rlsbf4(&gpsline[i+6+4+2+2]);
+                    LOG(MOD_GPS|DEBUG, "NAV-TIMEGPS tow(ms)=%d.%06d week=%d leapsecs=%d status=%d tacc=%d",
+                        tow, tow_ns, week, leapsecs, status, tacc);
+                } else {
+                    LOG(MOD_GPS|WARNING, "Unknown UBX frame: %H", 8+ubxlen, &gpsline[i]);
+                }
+                break;
+            }
+#endif // defined(CFG_ubx)
+        }
+        if( done ) {
+            if( done < gpsfill )
+                memmove(&gpsline[0], &gpsline[done], gpsfill-done);
+            gpsfill -= done;
+            done = 0;
+        }
+    }
+}
+
+
+static void gps_close () {
+    if( aio == NULL )
+        return;
+    if( isTTY ) {
+        if( tcsetattr(aio->fd, TCSANOW, &saved_tio) == -1 ) {
+            LOG(MOD_GPS|WARNING, "Failed to restore TTY settings for '%s': %s", device, strerror(errno));
+            return;
+        }
+        tcflush(aio->fd, TCIOFLUSH);
+    }
+    aio_close(aio);
+    aio = NULL;
+    isTTY = 0;
+}
+
+
+static int gps_reopen () {
+    struct stat st;
+    int fd;
+
+    if( aio ) {
+        aio_close(aio);
+        aio = NULL;
+    }
+
+    if( stat(device, &st) != -1  && (st.st_mode & S_IFMT) == S_IFIFO ) {
+        if( (fd = open(device, O_RDONLY | O_NONBLOCK)) == -1 ) {
+            LOG(MOD_GPS|ERROR, "Failed to open FIFO '%s': %s", device, strerror(errno));
+            return 0;
+        }
+        isTTY = 0;
+        garbageCnt = 0;
+    }
+    else {
+        u4_t pids[1];
+        int n = sys_findPids(device, pids, SIZE_ARRAY(pids));
+        if( n > 0 )
+            rt_fatal("GPS device '%s' in use by process: %d%s", device, pids[0], n>1?".. (and others)":"");
+
+        speed_t speed;
+        switch( baud ) {
+        case   9600: speed =   B9600; break;
+        case  19200: speed =  B19200; break;
+        case  38400: speed =  B38400; break;
+        case  57600: speed =  B57600; break;
+        case 115200: speed = B115200; break;
+        case 230400: speed = B230400; break;
+        default:
+            speed = B9600;
+            break;
+        }
+        if( (fd = open(device, O_RDWR | O_NOCTTY | O_NONBLOCK)) == -1 ) {
+            LOG(MOD_GPS|ERROR, "Failed to open TTY '%s': %s", device, strerror(errno));
+            return 0;
+        }
+        struct termios tio;
+        if( tcgetattr(fd, &tio) == -1 ) {
+            LOG(MOD_GPS|ERROR, "Failed to retrieve TTY settings from '%s': %s", device, strerror(errno));
+            close(fd);
+            return 0;
+        }
+        saved_tio = tio;
+
+        cfsetispeed(&tio, speed);
+        cfsetospeed(&tio, speed);
+
+        tio.c_cflag |= CLOCAL | CREAD | CS8;
+        tio.c_cflag &= ~(PARENB|CSTOPB);
+        tio.c_iflag |= IGNPAR;
+        tio.c_iflag &= ~(ICRNL|IGNCR|IXON|IXOFF);
+        tio.c_oflag  = 0;
+        tio.c_lflag |= ICANON;
+        tio.c_lflag &= ~(ISIG|IEXTEN|ECHO|ECHOE|ECHOK);
+        //tio.c_lflag &= ~(ICANON|ISIG|IEXTEN|ECHO|ECHOE|ECHOK);
+        //tio.c_cc[VMIN]  = 8;
+        //tio.c_cc[VTIME] = 0;
+        if( tcsetattr(fd, TCSANOW, &tio) == -1 ) {
+            LOG(MOD_GPS|ERROR, "Failed to apply TTY settings to '%s': %s", device, strerror(errno));
+            close(fd);
+            return 0;
+        }
+        tcflush(fd, TCIOFLUSH);
+        isTTY = 1;
+        garbageCnt = 4;
+
+#if defined(CFG_ubx)
+        if( ubx ) {
+            int n = sizeof(UBX_EN_NAVTIMEGPS);
+            if( write(fd, UBX_EN_NAVTIMEGPS, n) != n )
+                LOG(MOD_GPS|ERROR, "Failed to write UBX enable to GPS: n=%d %s", n, strerror(errno));
+        }
+#endif // defined(CFG_ubx)
+    }
+    // use device as dummy context
+    aio = aio_open(&device, fd, gps_read, NULL);
+    atexit(gps_close);
+    gpsfill = 0;
+    gps_read(aio);
+    return 1;
+}
+
+
+//
+// NOTE: Reading NMEA sentences from a GPS device is not used to sync time in any way.
+// This information is only indicative of having a fix (and how good) and is used to
+// report alarms back to the LNS.
+//
+int sys_enableGPS (str_t _device) {
+    if( _device == NULL )
+        return 1;  // no GPS device configured
+    device = _device;
+    baud = 9600;
+    ubx = 0;
+
+    rt_iniTimer(&reopen_tmr, reopen_timeout);
+    if( !gps_reopen() ) {
+        LOG(MOD_GPS|CRITICAL, "Initial open of GPS %s '%s' failed - GPS disabled!", isTTY ? "TTY":"FIFO", device);
+        return 0;
+    }
+    dbuf_t b = sys_readFile(lastpos_filename);
+    if( b.buf != NULL ) {
+        ujdec_t D;
+        uj_iniDecoder(&D, b.buf, b.bufsize);
+        if( uj_decode(&D) ) {
+            LOG(MOD_GPS|ERROR, "Parsing of '%s' failed - ignoring last GPS position", lastpos_filename);
+            return 1;
+        }
+        uj_enterArray(&D);
+        int slaveIdx;
+        while( (slaveIdx = uj_nextSlot(&D)) >= 0 ) {
+            double v = uj_num(&D);
+            switch(slaveIdx) {
+            case 0: orig_lat = v; break;
+            case 1: orig_lon = v; break;
+            }
+        }
+        uj_exitArray(&D);
+        free(b.buf);
+    }
+    time_fixchange = rt_getTime();
+    return 1;
+}
+
+#endif

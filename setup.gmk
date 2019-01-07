@@ -1,0 +1,124 @@
+# -*- makefile -*-
+
+# Top dir of s2core
+# - override accordingly in makefile including this setup.gmk
+ifndef TD
+$(error Need variable TD=../.... - must point to dir holding this setup.gmk)
+endif
+
+Q  = $(if ${V},,@)
+NQ = $(if ${V},>/dev/null,)
+
+platform ?= linux
+variant  ?= std
+
+-include ${TD}/setup-${platform}.gmk
+
+LOCAL_ARCH := $(shell gcc -dumpmachine)
+
+ARCH.linux   = x86_64-linux-gnu
+ARCH.rpi     = arm-linux-gnueabihf
+ARCH.kerlink = arm-klk-linux-gnueabi
+ARCH=${ARCH.${platform}}
+
+export TDfull := $(shell cd ${TD} && pwd)
+TOOLCHAIN=${HOME}/toolchain-${platform}
+
+
+ifeq (,$(wildcard ${TOOLCHAIN}))
+# No toolchain for cross compile - only ok if we can build locally
+ifeq (${LOCAL_ARCH},${ARCH})
+TOOLPREFIX=
+else
+$(warning No toolchain for platform '${platform}' and local arch is not '${ARCH}')
+TOOLPREFIX=NO-TOOLCHAIN-FOUND-
+endif
+else
+# Found a matching cross compile toolchain
+TOOLPREFIX=${TOOLCHAIN}/bin/${ARCH}-
+endif
+
+CC=${TOOLPREFIX}gcc
+LD=${TOOLPREFIX}ld
+AR=${TOOLPREFIX}ar
+OD=${TOOLPREFIX}objdump
+OC=${TOOLPREFIX}objcopy
+
+# Everything being build is somewhere in here
+BD=build-${platform}-${variant}
+
+# -- Architecture specific
+CFG.arm-linux-gnueabihf = linux
+# CFG.x86_64-linux-gnu    = linux
+
+# -- Variant specific
+#  testsim runs libloragw inside master process
+#  testms  uses a master slave model
+CFG.testsim = logini_lvl=DEBUG selftests tlsdebug lgwsim ral_lgw
+CFG.testms  = logini_lvl=DEBUG selftests tlsdebug lgwsim ral_master_slave
+CFG.testfs  = logini_lvl=DEBUG selftests tlsdebug lgwsim ral_lgw
+CFG.testpin = logini_lvl=INFO tlsdebug ral_lgw testpin
+CFG.std     = logini_lvl=INFO tlsdebug ral_lgw
+CFG.stdn    = logini_lvl=INFO tlsdebug ral_master_slave
+CFG.debug   = logini_lvl=DEBUG selftests tlsdebug ral_lgw
+CFG.debugn  = logini_lvl=DEBUG selftests tlsdebug ral_master_slave
+
+# -- Platform specific
+CFG.linux   = linux lgw1 no_leds
+CFG.rpi     = linux lgw1 no_leds
+CFG.kerlink = linux lgw1 no_leds
+
+SD.default = src-linux
+
+SD = $(or ${SD.${platform}}, ${SD.default})
+
+UTILS.linux = mtuns
+
+UTILS = $(or ${UTILS.${platform}}, ${UTILS.default})
+
+DEPS.default = mbedtls lgw
+DEPS.rpi     = mbedtls lgw
+
+DEPS = $(or ${DEPS.${platform}}, ${DEPS.default})
+
+PERSO.default =
+PERSO  = $(or ${PERSO.${platform}}, ${PERSO.default})
+PERSOH = $(if ${PERSO},perso.h,)
+
+# Paths to dependencies
+MBEDLIBS = -lmbedtls -lmbedx509 -lmbedcrypto
+
+# -lm: Needed for lgw which uses pow/ceil
+ifneq (minihub,$(platform))
+SYSLIBS  = -lm
+endif
+
+CFLAGS.linux.testsim  = -g -O0 --coverage
+CFLAGS.linux.testms   = -g -O0 --coverage
+CFLAGS.linux.testfs   = -g -O0 --coverage
+CFLAGS.linux.testpin  = -g -O3
+CFLAGS.linux.std      = -g -O3
+
+LIBS.linux   = -llgw   ${MBEDLIBS}      -lpthread
+LIBS.rpi     = -llgw   ${MBEDLIBS}      -lpthread
+LIBS.kerlink = -llgw   ${MBEDLIBS} -lrt -lpthread
+
+xCFG     =     ${CFG.${ARCH}}     ${CFG.${platform}}     ${CFG.${variant}}    ${CFG.${platform}.${variant}}
+xCFLAGS  =  ${CFLAGS.${ARCH}}  ${CFLAGS.${platform}}  ${CFLAGS.${variant}} ${CFLAGS.${platform}.${variant}}
+xINCS    =    ${INCS.${ARCH}}    ${INCS.${platform}}    ${INCS.${variant}}
+xLDFLAGS = ${LDFLAGS.${ARCH}} ${LDFLAGS.${platform}} ${LDFLAGS.${variant}}
+xLIBS    =    ${LIBS.${ARCH}}    ${LIBS.${platform}}    ${LIBS.${variant}}
+xFILES   =   ${FILES.${ARCH}}   ${FILES.${platform}}   ${FILES.${variant}}
+xOCFLAGS = ${OCFLAGS.${ARCH}} ${OCFLAGS.${platform}} ${OCFLAGS.${variant}}
+
+DEFS     = -DCFG_platform_${platform} -DCFG_platform=\"${platform}\" -DCFG_variant_${variant} -DCFG_variant=\"${variant}\"
+DEFS    += -DCFG_bdate='"$(shell date -u '+%Y-%m-%d %H:%M:%S')"'
+DEFS    += -DCFG_version='"$(shell if [ -f ${TD}/VERSION.txt ]; then cat ${TD}/VERSION.txt; else git describe --tag; fi)(${platform}/${variant})"'
+DEFS    += -DCFG_commit='"$(shell if git rev-parse --git-dir >/dev/null 2>&1; then git rev-parse --short HEAD; else echo -; fi)"'
+DEFS    += ${xCFG:%=-DCFG_%}
+INCS     = ${VPATH:%=-I%} -I ${TD}/${BD}/include ${xINCS}
+CFLAGS   = -Wall -std=gnu11 ${INCS} ${DEFS} ${xCFLAGS}
+LDFLAGS  = -L ${TD}/${BD}/lib ${xLDFLAGS}
+LIBS     = ${xLIBS} ${SYSLIBS}
+FILES    = ${xFILES}
+OCFLAGS  = ${xOCFLAGS}

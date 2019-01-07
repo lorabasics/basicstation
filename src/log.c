@@ -1,0 +1,157 @@
+// Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
+//
+// This file is subject to the terms and conditions defined in file 'LICENSE',
+// which is part of this source code package.
+
+#include "sys.h"
+#include "rt.h"
+#include "uj.h"
+
+const char* LVLSTR[] = {
+    [XDEBUG  ]= "XDEB",
+    [DEBUG   ]= "DEBU",
+    [VERBOSE ]= "VERB",
+    [INFO    ]= "INFO",
+    [NOTICE  ]= "NOTI",
+    [WARNING ]= "WARN",
+    [ERROR   ]= "ERRO",
+    [CRITICAL]= "CRIT",
+};
+const char* MODSTR[] = {
+    [MOD_ANY/8]= "any",
+    [MOD_RAL/8]= "RAL",
+    [MOD_S2E/8]= "S2E",
+    [MOD_WSS/8]= "WSS",
+    [MOD_JSN/8]= "JSN",
+    [MOD_AIO/8]= "AIO",
+    [MOD_CUP/8]= "CUP",
+    [MOD_SYS/8]= "SYS",
+    [MOD_TCE/8]= "TCE",
+    [MOD_TST/8]= "TST",
+    [MOD_SIO/8]= "___",
+    [MOD_SYN/8]= "SYN",
+    [MOD_GPS/8]= "GPS",
+    [MOD_SIM/8]= "SIM",
+    [MOD_WEB/8]= "WEB",
+};
+
+#ifndef CFG_logini_lvl
+#define CFG_logini_lvl INFO
+#endif
+
+static char   logline[512];
+static dbuf_t logbuf = { .buf=logline, .bufsize=sizeof(logline), .pos=0 };
+static char   slaveMod[4];
+static u1_t   logLevels[32] = {
+    CFG_logini_lvl, CFG_logini_lvl, CFG_logini_lvl, CFG_logini_lvl,
+    CFG_logini_lvl, CFG_logini_lvl, CFG_logini_lvl, CFG_logini_lvl,
+    CFG_logini_lvl, CFG_logini_lvl, CFG_logini_lvl, CFG_logini_lvl,
+    CFG_logini_lvl, CFG_logini_lvl, CFG_logini_lvl, CFG_logini_lvl
+};
+
+
+static int log_header (u1_t mod_level) {
+    int mod = (mod_level & MOD_ALL) >> 3;
+    logbuf.pos = 0;
+    str_t mod_s = slaveMod[0] ? slaveMod : mod >= SIZE_ARRAY(MODSTR) ? "???":MODSTR[mod];
+    xprintf(&logbuf, "%.3T [%s:%s] ", rt_getUTC(), mod_s, LVLSTR[mod_level & 7]);
+    return logbuf.pos;
+}
+
+int log_str2level (const char* level) {
+    if( level[0] >= '0' && level[0] <='7' ) {
+        return (level[0]-'0') | MOD_ALL;
+    }
+    int mod = MOD_ALL;
+    if( level[0] && level[1] && level[2] && level[3] == ':' ) {
+        for( int m=0; m < SIZE_ARRAY(MODSTR); m++ ) {
+            if( strncasecmp(level, MODSTR[m], 3) == 0 ) {
+                mod = m << 3;
+                level += 4;
+                goto cklevel;
+            }
+        }
+        return -1;
+    }
+ cklevel:
+    for( int i=0; i < SIZE_ARRAY(LVLSTR); i++ ) {
+        if( strncasecmp(level, LVLSTR[i], 4) == 0 )
+            return i | mod;
+    }
+    return -1;
+}
+
+str_t log_parseLevels (const char* levels) {
+    do {
+        int l = log_str2level(levels);
+        if( l < 0 )
+            return levels;
+        log_setLevel(l);
+        str_t s = strchr(levels, ',');
+        if( s == NULL )
+            return NULL;
+        levels = s+1;
+    } while(1);
+}
+
+void log_setSlaveIdx (s1_t idx) {
+    slaveMod[0] = 'S';
+    slaveMod[1] = idx/10 + '0';
+    slaveMod[2] = idx%10 + '0';
+}
+
+int log_setLevel (int level) {
+    if( level < 0 ) return -1;
+    int mod = level & MOD_ALL;
+    level &= 7;
+    if( mod == MOD_ALL ) {
+        for( int m=0; m<32; m++ ) {
+            logLevels[m] = level;
+        }
+        return -1;
+    }
+    int old = logLevels[mod>>3];
+    logLevels[mod>>3] = level;
+    return old;
+}
+
+int log_shallLog (u1_t mod_level) {
+    return (mod_level&7) >= logLevels[(mod_level & MOD_ALL) >> 3];
+}
+
+void log_vmsg (u1_t mod_level, const char* fmt, va_list args) {
+    if( !log_shallLog(mod_level) )
+        return;
+    int n = log_header(mod_level);
+    logbuf.pos = n;
+    vxprintf(&logbuf, fmt, args);
+    log_flush();
+}
+
+void log_msg (u1_t mod_level, const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    log_vmsg(mod_level, fmt, ap);
+    va_end(ap);
+}
+
+int log_special (u1_t mod_level, dbuf_t* b) {
+    if( !log_shallLog(mod_level) )
+        return 0;
+    b->buf = logbuf.buf;
+    b->bufsize = logbuf.bufsize;
+    b->pos = log_header(mod_level);
+    return 1;
+}
+
+void log_specialFlush (int len) {
+    assert(len < logbuf.bufsize);
+    logbuf.pos = len;
+    log_flush();
+}
+
+void log_flush () {
+    xeol(&logbuf);
+    xeos(&logbuf);
+    sys_addLog(logbuf.buf, logbuf.pos);
+}

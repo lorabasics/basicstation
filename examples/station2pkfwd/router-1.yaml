@@ -1,0 +1,28 @@
+station:
+  JoinEui: null
+  NetID: null
+  bcning: null
+  config: {}
+  freq_range: [863000000, 870000000]
+  hwspec: sx1301/1
+  max_eirp: 16
+  protocol: 1
+  # base region name: EU863, US902
+  region: EU863
+  # points to region in regions.yaml which defines DRs and upchannels
+  regionid: 1000
+  sx1301_conf:
+  - chan_FSK: {enable: false}
+    chan_Lora_std: {enable: false}
+    chan_multiSF_0: {enable: true, if: -375000, radio: 0}
+    chan_multiSF_1: {enable: true, if: -175000, radio: 0}
+    chan_multiSF_2: {enable: true, if: 25000, radio: 0}
+    chan_multiSF_3: {enable: true, if: 375000, radio: 0}
+    chan_multiSF_4: {enable: true, if: -237500, radio: 1}
+    chan_multiSF_5: {enable: true, if: 237500, radio: 1}
+    chan_multiSF_6: {enable: false}
+    chan_multiSF_7: {enable: false}
+    radio_0: {enable: true, freq: 868475000}
+    radio_1: {enable: true, freq: 869287500}
+pktfwd:
+  gateway_ID: "0000000000000001"

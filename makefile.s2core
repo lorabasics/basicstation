@@ -1,0 +1,91 @@
+# -*- makefile -*-
+
+TD=../..
+include ${TD}/setup.gmk
+
+TARGET.default = ../bin/station
+TARGET = $(or ${TARGET.${platform}}, ${TARGET.default})
+
+VPATH+=${TD}/src $(patsubst %/, %, $(filter %/, $(wildcard ${TD}/src/*/))) $(patsubst %,${TD}/%,${SD}) .
+
+SRCS = $(notdir $(wildcard ${VPATH:%=%/*.c}))
+ASRCS = $(notdir $(wildcard ${VPATH:%=%/*.S}))
+
+OBJS=${SRCS:.c=.o} ${ASRCS:.S=.s.o} ${FILES:=.o}
+DEPS=${SRCS:.c=.d}
+
+all: ${TARGET}
+
+../bin/station: station_main.c ../lib/libs2core.a
+	@echo " [${ARCH}] CC   $@" ${NQ}
+	${Q}${CC} ${CFLAGS} ${LDFLAGS} $^ ${LIBS} -o $@
+	@echo " platform=${platform} variant=${variant} STATION EXE built"
+
+../lib/libs2core.a: ${PERSOH} ${OBJS}
+	@echo " [${ARCH}] AR   $@" ${NQ}
+	${Q}${AR} cr $@ $^
+
+perso.h: $(patsubst %.asc, %,${PERSO})
+	@echo " [${ARCH}] CP   $@ <- $^" ${NQ}
+	@touch $@
+	${Q}cp $< $@
+
+%.h: %.h.asc
+	@echo " [${ARCH}] GPG  $@ <- $^" ${NQ}
+	${Q}gpg --decrypt --output $@ $<
+
+%.d: %.c
+	@echo " [${ARCH}] D    $@" ${NQ}
+	${Q}${CC} -E -MMD -MP -MT "$@ ${@:.d=.o}" ${CFLAGS} $< >/dev/null
+
+%.o: %.c
+	@echo " [${ARCH}] CC   $@" ${NQ}
+	${Q}${CC} ${CFLAGS} -c $< -o $@
+
+%.s.o: %.S
+	@echo " [${ARCH}] CC   $@" ${NQ}
+	${Q}${CC} ${CFLAGS} -c $< -o $@
+
+%.bin.o: %.bin
+	@echo " [${ARCH}] OC   $@  " ${NQ}
+	${Q} ${OC} ${OCFLAGS} ${<F} $@
+
+%.bin: %
+	${Q} cp $< $@
+
+%.gz.bin: %
+	@echo " [${ARCH}] GZIP $@  " ${NQ}
+	${Q} gzip $< -c > $@
+
+%.crt.bin: %.crt
+	@echo " [${ARCH}] OSSL $@  " ${NQ}
+	${Q} openssl x509 $1 -in $< -outform DER -out $@
+
+%.key.bin: %.key
+	@echo " [${ARCH}] OSSL $@  " ${NQ}
+	${Q} openssl rsa $1 -in $< -outform DER -out $@ 2>/dev/null
+
+%.prime256v1.pub.bin: %.prime256v1.pub
+	@echo " [${ARCH}] OSSL $@  " ${NQ}
+	${Q} openssl ec -in $< -pubin -outform der 2>/dev/null | tail -c 64 1> $@
+
+# Linking strings (*.str)
+%.str.o: %.str
+	@echo " [${ARCH}] OC   $@  " ${NQ}
+	${Q} ${OC} ${OCFLAGS} ${<F} $@
+
+%.str: %
+	@echo " [${ARCH}] STR  $@  " ${NQ}
+	${Q} cp $< $@ ; printf "\0" >> $@
+
+clean super-clean:
+	rm -rf *.o *.d *.gcno ../lib/libs2core.a
+	rm -f ${TARGET}
+	rm -f ${PERSOH}
+
+.PHONY: all clean super-clean
+.INTERMEDIATE: $(patsubst %.asc, %,${PERSO})
+
+# ${DEPS}: perso.h
+
+# -include ${DEPS}
