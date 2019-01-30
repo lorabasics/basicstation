@@ -38,6 +38,11 @@ else
 TOOLPREFIX=${TOOLCHAIN}/bin/${ARCH}-
 endif
 
+ifeq (kerlink,${platform})
+# Needed for loader to find libmpfr.so.4
+export LD_LIBRARY_PATH=${TOOLCHAIN}/usr/lib
+endif
+
 CC=${TOOLPREFIX}gcc
 LD=${TOOLPREFIX}ld
 AR=${TOOLPREFIX}ar

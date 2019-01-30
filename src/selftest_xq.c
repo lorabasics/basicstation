@@ -5,6 +5,7 @@
 
 #include "selftests.h"
 #include "xq.h"
+#include "uj.h"
 
 static int in_queue(txq_t* txq, txidx_t q) {
     txjob_t* j = txq_idx2job(txq, q);
@@ -39,6 +40,12 @@ void selftest_txq () {
     TCHECK(TXIDX_NIL == txq_job2idx(&txq, NULL));
     TCHECK(0         == txq_job2idx(&txq, &(txq.txjobs[0])));
     TCHECK(1         == txq_job2idx(&txq, &(txq.txjobs[1])));
+
+    char* outbuf = rt_mallocN(char, 512);
+    ujbuf_t B = {.buf=outbuf, .bufsize=512, .pos=0 };
+
+    xprintf(&B, "%J", &txq.txjobs[0]);
+    TCHECK(strcmp("::0 diid=0 [ant#0]", B.buf) == 0);
 
     txjob_t* j;
 

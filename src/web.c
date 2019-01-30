@@ -62,7 +62,7 @@ static int web_route(httpd_pstate_t* pstate, httpd_t* hd, dbuf_t* buf) {
     *buf = sys_webFile(path);
 
     if ( buf->buf != NULL) {
-        if( buf->pos >= 4 && rt_rlsbf4((u1_t*)buf->buf) == 0x08088b1f ) {
+        if( buf->pos >= 4 && (rt_rlsbf4((u1_t*)buf->buf) & 0x00ffffff) == 0x088b1f ) {
             pstate->contentEnc = "gzip";
         }
         return 200;

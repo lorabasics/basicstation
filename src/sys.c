@@ -122,6 +122,7 @@ dbuf_t readFile (str_t file, int complain) {
     // For the latter stat reports a file size of 4K but read returns a smaller number!
     if( (fd = fs_open(file, O_RDONLY)) == -1 ||
         (fsize = sizeFile(file)) == -1 ||
+        fsize > MAX_DOFF ||
         (n = fs_read(fd, b.buf = rt_mallocN(char, fsize+1), fsize)) == -1 ) {
         if( complain )
             LOG(MOD_SYS|ERROR, "Failed to read '%s': %s", file, strerror(errno));

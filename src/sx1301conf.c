@@ -360,6 +360,11 @@ int sx1301conf_start (struct sx1301conf* sx1301conf, u4_t cca_region) {
             goto fail;
         }
     }
+
+    if( cca_region && !setup_LBT(sx1301conf, cca_region) ) {
+        goto fail;
+    }
+
     if( log_shallLog(MOD_RAL|VERBOSE) ) {
         LOG(MOD_RAL|DEBUG, "SX1301 txlut table (%d entries)", sx1301conf->txlut.size);
         for( int i=0; i<sx1301conf->txlut.size; i++ ) {
@@ -402,9 +407,7 @@ int sx1301conf_start (struct sx1301conf* sx1301conf, u4_t cca_region) {
             LOG(MOD_RAL|VERBOSE, "SX1301 LBT not enabled");
         }
     }
-    if( cca_region && !setup_LBT(sx1301conf, cca_region) ) {
-        goto fail;
-    }
+
     LOG(MOD_RAL|INFO, "Station device: %s (PPS capture %sabled)", sx1301conf->device, sx1301conf->pps ? "en":"dis");
     lgwx_device_mode = sys_deviceMode;
     int err = lgw_start();

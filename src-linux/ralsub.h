@@ -39,6 +39,7 @@ struct ral_stop_req {
 struct ral_txstatus_req {
     sL_t rctx;
     u1_t cmd;
+    u1_t status; // struct length needs to align with resp
 };
 
 struct ral_txabort_req {

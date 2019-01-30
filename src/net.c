@@ -700,12 +700,12 @@ static void ws_connecting (aio_t* aio) {
             ws_shutdown(conn);
             return;
         }
-        conn->rbeg = conn->rpos = conn->rend;
         conn->wpos = conn->wend = conn->wfill = WSHDR_RESV_W;
         aio_set_rdfn(conn->aio, ws_connected_r);
         aio_set_wrfn(conn->aio, NULL);
         conn->state = WS_CONNECTED;
         conn->evcb(conn, WSEV_CONNECTED);
+        conn->rbeg = conn->rend; // signal lower level that we consumed this frame
         if( conn->aio )
             ws_connected_r(conn->aio);
         return;

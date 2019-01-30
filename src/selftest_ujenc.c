@@ -35,8 +35,10 @@ static void test_simple_values() {
     uj_encUint(&B,  1);
     uj_encNum (&B,  1.5);
     uj_encTime(&B, 21.5);
+    uj_encDate(&B, 1451649600L*1000000LL);
     uj_encStr (&B,  "-\"\\\b\f\n\r\t\x01-");
     uj_encHex (&B,  (const u1_t*)"ABC", 3);
+    uj_encMac (&B,  0x1A2B3C4DA1B2C3D4);
     uj_encEui (&B,  0x91A2B3C4D5E6F708);
     uj_encId6 (&B,  0x0000000000000000);
     uj_encId6 (&B,  0x0000000000000001);
@@ -47,9 +49,10 @@ static void test_simple_values() {
     uj_encId6 (&B,  0x0000000300020000);
     uj_encClose(&B, ']');
     TCHECK(xeos(&B) == 1 );
-    T = "[null,false,true,-1,1,1.5,21.500000,"
+    T = "[null,false,true,-1,1,1.5,21.500000,\"2016-01-01 12:00:00\","
         "\"-\\\"\\\\\\b\\f\\n\\r\\t\\u0001-\","
         "\"414243\","
+        "\"3C:4D:A1:B2:C3:D4\","
         "\"91-A2-B3-C4-D5-E6-F7-08\","
         "\"::0\",\"::1\",\"::2:1\",\"4::1\",\"4:3::\",\"4::\",\"0:3:2:0\""
         "]";
@@ -85,15 +88,17 @@ static void test_simple_values() {
               "E", 'U', (uL_t) 1,
               "G1",'g',  1.25,
               "G2",'T', 21.25,
+              "D", 'D', 1451649600L*1000000LL,
               "F", 's', "abc",
               "G", 'H', 3, (const u1_t*)"ABC",
+              "M", 'M', 0x1A2B3C4DA1B2C3D4,
               "H", 'E', 0x91A2B3C4D5E6F708,
               "I", '6', (uL_t)0xB000A,
               NULL);
     uj_encClose(&B, '}');
     TCHECK(xeos(&B) == 1 );
-    T = "{\"A\":true,\"B\":-1,\"C\":-1,\"D\":1,\"E\":1,\"G1\":1.25,\"G2\":21.250000,"
-        "\"F\":\"abc\",\"G\":\"414243\",\"H\":\"91-A2-B3-C4-D5-E6-F7-08\",\"I\":\"::b:a\"}";
+    T = "{\"A\":true,\"B\":-1,\"C\":-1,\"D\":1,\"E\":1,\"G1\":1.25,\"G2\":21.250000,\"D\":\"2016-01-01 12:00:00\","
+        "\"F\":\"abc\",\"G\":\"414243\",\"M\":\"3C:4D:A1:B2:C3:D4\",\"H\":\"91-A2-B3-C4-D5-E6-F7-08\",\"I\":\"::b:a\"}";
     TCHECK(strcmp(T, B.buf) == 0);
 
     B.pos = 0;

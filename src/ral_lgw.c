@@ -18,8 +18,11 @@
 #include "lgw/loragw_reg.h"
 #include "lgw/loragw_hal.h"
 
+#define RAL_MAX_RXBURST 10
 
-#define FSK_BAUD 50000
+#define FSK_BAUD      50000
+#define FSK_FDEV      25  // [kHz]
+#define FSK_PRMBL_LEN 5
 
 static const u2_t SF_MAP[] = {
     [SF12 ]= DR_LORA_SF12,
@@ -67,6 +70,8 @@ void ral_rps2lgw (rps_t rps, struct lgw_pkt_tx_s* p) {
     if( rps_sf(rps) == FSK ) {
         p->modulation = MOD_FSK;
         p->datarate   = FSK_BAUD;
+        p->f_dev      = FSK_FDEV;
+        p->preamble   = FSK_PRMBL_LEN;
     } else {
         p->modulation = MOD_LORA;
         p->datarate   = SF_MAP[rps_sf(rps)];
@@ -255,7 +260,8 @@ void ral_txabort (u1_t txunit) {
 
 //ATTR_FASTCODE 
 static void rxpolling (tmr_t* tmr) {
-    while(1) {
+    int rounds = 0;
+    while(rounds++ < RAL_MAX_RXBURST) {
         struct lgw_pkt_rx_s pkt_rx;
         int n = lgw_receive(1, &pkt_rx);
         if( n < 0 || n > 1 ) {
@@ -265,10 +271,12 @@ static void rxpolling (tmr_t* tmr) {
         if( n==0 ) {
             break;
         }
+        LOG(XDEBUG, "RX mod=%s f=%d bw=%d sz=%d dr=%d %H", pkt_rx.modulation == 0x10 ? "LORA" : "FSK", pkt_rx.freq_hz, (int[]){0,500,250,125}[pkt_rx.bandwidth], pkt_rx.size, pkt_rx.datarate, pkt_rx.size, pkt_rx.payload);
+
         rxjob_t* rxjob = !TC ? NULL : s2e_nextRxjob(&TC->s2ctx);
         if( rxjob == NULL ) {
             LOG(ERROR, "SX1301 RX frame dropped - out of space");
-            continue;
+            break; // Allow to flush RX jobs
         }
         if( pkt_rx.status != STAT_CRC_OK ) {
             LOG(XDEBUG, "Dropped frame without CRC or with broken CRC");

@@ -45,6 +45,7 @@ struct datetime {
 
 
 typedef u2_t doff_t;
+enum { MAX_DOFF = 0xFFFF };
 typedef struct dbuf {
     char*  buf;
     doff_t bufsize;

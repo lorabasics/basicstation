@@ -6,8 +6,9 @@ PLT=platform-${platform}
 LGWLIB=${TD}/${BD}/lib/liblgw.a
 LGWINC=${TD}/${BD}/include/lgw
 
-HFILES = $(notdir $(wildcard ${PLT}/libloragw/inc/*.h))
-ARTEFACTS = ${LGWLIB} ${LGWINC} $(patsubst %, ${TD}/${BD}/include/lgw/%, ${HFILES} config.h)
+HFILES = $(wildcard ${PLT}/libloragw/inc/*.h)
+SRCS = $(wildcard ${PLT}/libloragw/inc/*.c)
+ARTEFACTS = ${LGWLIB} ${LGWINC} $(patsubst %, ${LGWINC}/%, $(notdir ${HFILES}) config.h)
 
 all: $(if ${HFILES},${ARTEFACTS},${PLT})
 
@@ -19,10 +20,10 @@ ${LGWLIB}: ${PLT}/libloragw/libloragw.a
 	@echo "  CP    ${<F} -> $@"
 	@cp $< $@
 
-${PLT}/libloragw/libloragw.a:
+${PLT}/libloragw/libloragw.a: ${SRCS} ${HFILES}
 	${MAKE} -C ${PLT}/libloragw libloragw.a CC=${CC} AR=${AR} LD=${LD} TDfull=${TDfull}
 
-${PLT}/libloragw/inc/config.h:
+${PLT}/libloragw/inc/config.h: ${PLT}/libloragw/library.cfg
 	${MAKE} -C ${PLT}/libloragw inc/config.h CC=${CC} AR=${AR} LD=${LD} TDfull=${TDfull}
 
 ${LGWINC}/%.h: ${PLT}/libloragw/inc/%.h | ${LGWINC}

@@ -109,103 +109,104 @@ static void pipe_read (aio_t* aio) {
                 return;
             rt_fatal("Slave pipe read fail: %s", strerror(errno));
         }
-        struct ral_header* req = (struct ral_header*)buf;
-        assert(n >= sizeof(*req));
-        switch( req->cmd ) {
-        case RAL_CMD_TXSTATUS: {
-            assert(n == sizeof(struct ral_txstatus_req));
-            struct ral_response* resp = (struct ral_response*)buf;
-            u1_t ret=TXSTATUS_IDLE, status;
-            int err = lgw_status(TX_STATUS, &status);
-            /**/ if (err != LGW_HAL_SUCCESS)  { LOG(MOD_RAL|ERROR, "lgw_status failed"); }
-            else if( status == TX_SCHEDULED ) { ret = TXSTATUS_SCHEDULED; }
-            else if( status == TX_EMITTING  ) { ret = TXSTATUS_EMITTING; }
-            resp->status = ret;
-            n = sizeof(*resp);
-            break;
-        }
-        case RAL_CMD_TXABORT: {
-            lgw_abort_tx();
-            n = 0;
-            break;
-        }
-        case RAL_CMD_TIMESYNC: {
-            sendTimesync();
-            n = 0;
-            break;
-        }
-        case RAL_CMD_TX_NOCCA:
-        case RAL_CMD_TX: {
-            struct ral_tx_req* txreq = (struct ral_tx_req*)buf;
-            struct lgw_pkt_tx_s pkt_tx;
-            if( (txreq->rps & RPS_BCN) ) {
-                
-                pkt_tx.tx_mode = ON_GPS;
-                pkt_tx.preamble = 10;
-            } else {
-                pkt_tx.tx_mode = TIMESTAMPED;
-                pkt_tx.preamble = 8;
+        int off = 0;
+        while( off < n ) {
+            struct ral_header* req = (struct ral_header*)&buf[off];
+            assert(n >= off + sizeof(*req));
+            if( n >= off + sizeof(struct ral_txstatus_req) && req->cmd == RAL_CMD_TXSTATUS ) {
+                off += sizeof(struct ral_txstatus_req);
+                struct ral_response* resp = (struct ral_response*)req;
+                u1_t ret=TXSTATUS_IDLE, status;
+                int err = lgw_status(TX_STATUS, &status);
+                /**/ if (err != LGW_HAL_SUCCESS)  { LOG(MOD_RAL|ERROR, "lgw_status failed"); }
+                else if( status == TX_SCHEDULED ) { ret = TXSTATUS_SCHEDULED; }
+                else if( status == TX_EMITTING  ) { ret = TXSTATUS_EMITTING; }
+                resp->status = ret;
+                pipe_write_data(resp, sizeof(*resp));
+                continue;
             }
-            ral_rps2lgw(txreq->rps, &pkt_tx);
-            pkt_tx.freq_hz    = txreq->freq;
-            pkt_tx.count_us   = txreq->xtime;
-            pkt_tx.rf_chain   = 0;
-            pkt_tx.rf_power   = (float)(txreq->txpow - txpowAdjust)/TXPOW_SCALE;
-            pkt_tx.coderate   = CR_LORA_4_5;
-            pkt_tx.invert_pol = true;
-            pkt_tx.no_crc     = true;
-            pkt_tx.no_header  = false;
-            pkt_tx.size       = txreq->txlen;
-            memcpy(pkt_tx.payload, txreq->txdata, txreq->txlen);
-            int err = lgw_send(pkt_tx);
-            if( region == 0 ) {
-                n = 0;
-                break;
+            else if( n >= off + sizeof(struct ral_txabort_req) && req->cmd == RAL_CMD_TXABORT) {
+                off += sizeof(struct ral_txabort_req);
+                lgw_abort_tx();
+                continue;
             }
-            // Send back CCA/LBT result
-            struct ral_response* resp = (struct ral_response*)buf;
-            u1_t ret = RAL_TX_OK;
-            if( err == LGW_HAL_SUCCESS ) {
-                ret = RAL_TX_OK;
-            } else if( err == LGW_LBT_ISSUE ) {
-                ret = RAL_TX_NOCA;
-            } else {
-                LOG(MOD_RAL|ERROR, "lgw_send failed");
-                ret = RAL_TX_FAIL;
+            else if( n >= off + sizeof(struct ral_timesync_req) && req->cmd == RAL_CMD_TIMESYNC) {
+                off += sizeof(struct ral_timesync_req);
+                sendTimesync();
+                continue;
             }
-            resp->status = ret;
-            n = sizeof(*resp);
-            break;
-        }
-        case RAL_CMD_CONFIG: {
-            struct ral_config_req* confreq = (struct ral_config_req*)buf;
-            struct sx1301conf sx1301conf;
-            // Note: sx1301conf_start can take considerable amount of time (if LBT on up to 8s!!)
-            if( !sx1301conf_parse_setup(&sx1301conf, sys_slaveIdx, confreq->hwspec, confreq->json, confreq->jsonlen) ||
-                !sys_runRadioInit(sx1301conf.device) ||
-                !sx1301conf_start(&sx1301conf, confreq->region) )
-                rt_fatal("Slave radio start up failed");
-            if( sx1301conf.pps && sys_slaveIdx ) {
-                LOG(MOD_RAL|ERROR, "Only slave#0 may have PPS enabled");
-                sx1301conf.pps = 0;
+            else if( n >= off + sizeof(struct ral_tx_req) && (req->cmd == RAL_CMD_TX_NOCCA || req->cmd == RAL_CMD_TX  )) {
+                off += sizeof(struct ral_tx_req);
+                struct ral_tx_req* txreq = (struct ral_tx_req*)req;
+                struct lgw_pkt_tx_s pkt_tx;
+                if( (txreq->rps & RPS_BCN) ) {  
+                    pkt_tx.tx_mode = ON_GPS;
+                    pkt_tx.preamble = 10;
+                } else {
+                    pkt_tx.tx_mode = TIMESTAMPED;
+                    pkt_tx.preamble = 8;
+                }
+                ral_rps2lgw(txreq->rps, &pkt_tx);
+                pkt_tx.freq_hz    = txreq->freq;
+                pkt_tx.count_us   = txreq->xtime;
+                pkt_tx.rf_chain   = 0;
+                pkt_tx.rf_power   = (float)(txreq->txpow - txpowAdjust)/TXPOW_SCALE;
+                pkt_tx.coderate   = CR_LORA_4_5;
+                pkt_tx.invert_pol = true;
+                pkt_tx.no_crc     = true;
+                pkt_tx.no_header  = false;
+                pkt_tx.size       = txreq->txlen;
+                memcpy(pkt_tx.payload, txreq->txdata, txreq->txlen);
+                int err = lgw_send(pkt_tx);
+                if( region == 0 ) {
+                    continue;
+                }
+                // Send back CCA/LBT result
+                struct ral_response* resp = (struct ral_response*)req;
+                u1_t ret = RAL_TX_OK;
+                if( err == LGW_HAL_SUCCESS ) {
+                    ret = RAL_TX_OK;
+                } else if( err == LGW_LBT_ISSUE ) {
+                    ret = RAL_TX_NOCA;
+                } else {
+                    LOG(MOD_RAL|ERROR, "lgw_send failed");
+                    ret = RAL_TX_FAIL;
+                }
+                resp->status = ret;
+                pipe_write_data(resp, sizeof(*resp));
+                continue;
             }
-            pps_en = sx1301conf.pps;
-            region = confreq->region;
-            txpowAdjust = sx1301conf.txpowAdjust;
-            last_xtime = ts_newXtimeSession(sys_slaveIdx);
-            rt_yieldTo(&rxpoll_tmr, rx_polling);
-            sendTimesync();
-            n = 0;
-            break;
+            else if( n >= off + sizeof(struct ral_config_req) && req->cmd == RAL_CMD_CONFIG) {
+                off += sizeof(struct ral_config_req);
+                struct ral_config_req* confreq = (struct ral_config_req*)req;
+                struct sx1301conf sx1301conf;
+                // Note: sx1301conf_start can take considerable amount of time (if LBT on up to 8s!!)
+                if( !sx1301conf_parse_setup(&sx1301conf, sys_slaveIdx, confreq->hwspec, confreq->json, confreq->jsonlen) ||
+                    !sys_runRadioInit(sx1301conf.device) ||
+                    !sx1301conf_start(&sx1301conf, confreq->region) )
+                    rt_fatal("Slave radio start up failed");
+                if( sx1301conf.pps && sys_slaveIdx ) {
+                    LOG(MOD_RAL|ERROR, "Only slave#0 may have PPS enabled");
+                    sx1301conf.pps = 0;
+                }
+                pps_en = sx1301conf.pps;
+                region = confreq->region;
+                txpowAdjust = sx1301conf.txpowAdjust;
+                last_xtime = ts_newXtimeSession(sys_slaveIdx);
+                rt_yieldTo(&rxpoll_tmr, rx_polling);
+                sendTimesync();
+                continue;
+            }
+            else if( n >= off + sizeof(struct ral_stop_req) && req->cmd == RAL_CMD_STOP) {
+                off += sizeof(struct ral_stop_req);
+                lgw_stop();
+                continue;
+            }
+            else {
+                rt_fatal("Master sent unexpected data: cmd=%d size=%d", req->cmd, n-off);
+            }
         }
-        case RAL_CMD_STOP: {
-            lgw_stop();
-            n = 0;
-            break;
-        }
-        }
-        if( n > 0 )
-            pipe_write_data(buf, n);
+        assert(off==n); // req fragments should not exist
     }
 }
 

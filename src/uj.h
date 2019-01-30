@@ -99,10 +99,12 @@ void uj_encInt  (ujbuf_t* buf, sL_t val);
 void uj_encUint (ujbuf_t* buf, uL_t val);
 void uj_encNum  (ujbuf_t* buf, double val);
 void uj_encTime (ujbuf_t* buf, double val);
+void uj_encDate (ujbuf_t* buf, uL_t date);
 void uj_encKey  (ujbuf_t* buf, const char* key);
 void uj_encStr  (ujbuf_t* buf, const char* s);
 void uj_encHex  (ujbuf_t* buf, const u1_t* d, int len);
 void uj_encEui  (ujbuf_t* buf, uL_t eui);
+void uj_encMac  (ujbuf_t* buf, uL_t mac);
 void uj_encId6  (ujbuf_t* buf, uL_t eui);
 
 void uj_encKV   (ujbuf_t* buf, const char* key, char type, ...);

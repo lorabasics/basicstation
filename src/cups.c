@@ -177,12 +177,18 @@ static void cups_update_info (conn_t* _conn, int ev) {
     cups_t* cups = conn2cups(_conn);
 
     if( ev == HTTPEV_CONNECTED ) {
-        LOG(MOD_CUP|VERBOSE, "Retrieving update-info from CUPS%s %s...", sys_credset2str(cups_credset), sys_uri(SYS_CRED_CUPS, cups_credset));
+        dbuf_t cupsuri;
+        dbuf_str(cupsuri, sys_uri(SYS_CRED_CUPS, cups_credset));
+        LOG(MOD_CUP|VERBOSE, "Retrieving update-info from CUPS%s %s...", sys_credset2str(cups_credset), cupsuri.buf);
+        struct uri_info cui;
+        uri_parse(&cupsuri, &cui, 0); // Does not write
         dbuf_t b = http_getReqbuf(&cups->hc);
         xprintf(&b,
                 "POST /update-info HTTP/1.1\r\n"
-                "Content-Length: 0000\r\n"
+                "Host: %*s\r\n"
+                "Content-Length: 00000\r\n"
                 "%s\r\n",
+                cui.hostportEnd-cui.hostportBeg, cupsuri.buf+cui.hostportBeg,
                 cups->hc.c.authtoken ? cups->hc.c.authtoken : "");
         doff_t bodybeg = b.pos;
         xputs(&b, "{", -1);  // note: uj_encOpen would create a comma since b.pos>0
