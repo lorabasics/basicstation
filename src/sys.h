@@ -36,6 +36,7 @@ enum { PPS_GPS=0, PPS_FUZZY, PPS_TESTPIN };
 extern u1_t   sys_modePPS; // special PPS mode?
 extern u1_t   sys_deviceMode; // special mode used for GW regr testing
 extern u1_t   sys_noTC;
+extern u1_t   sys_noCUPS;
 extern u2_t   sys_webPort;
 extern s1_t   sys_slaveIdx;   // -1=master, >=0 slave process
 extern uL_t   protoEUI;
@@ -104,7 +105,7 @@ void   sys_startTC();
 s1_t   sys_statusTC();
 
 void   sys_iniCUPS();
-void   sys_triggerCUPS();
+void   sys_triggerCUPS(int delay);
 void   sys_clearCUPS();
 void   sys_delayCUPS();
 s1_t   sys_statusCUPS();

@@ -63,8 +63,11 @@ static void pipe_write_data (void* data, int len) {
         if( errno == EPIPE )
             rt_fatal("Slave (%d) - Broken pipe", sys_slaveIdx);
         if( errno == EAGAIN ) {
-            if( ++retries > 5 )
-                rt_fatal("Slave (%d) - Pipe full - master too slow", sys_slaveIdx);
+            if( ++retries > 5 ) {
+                // rt_fatal("Slave (%d) - Pipe full - master too slow", sys_slaveIdx);
+                LOG(MOD_RAL|ERROR, "Slave (%d) - Pipe full - dropping message", sys_slaveIdx);
+                return;
+            }
             rt_usleep(rt_millis(1));
         }
     }

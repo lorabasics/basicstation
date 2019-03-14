@@ -1015,6 +1015,8 @@ static void _http_close (http_t* conn, tmrcb_t trigCloseEv) {
     tls_freeSession(conn->c.tlsctx); conn->c.tlsctx = NULL;
     tls_freeConf(conn->c.tlsconf); conn->c.tlsconf = NULL;
     aio_close(conn->c.aio);
+    rt_free((void*)conn->c.authtoken);
+    conn->c.authtoken = NULL;
     conn->c.rpos = conn->c.rbeg = conn->c.rend = 0;
     conn->c.wfill = conn->c.wpos = conn->c.wend = 0;
     conn->c.aio = NULL;

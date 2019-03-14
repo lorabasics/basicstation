@@ -66,6 +66,13 @@ typedef struct slave {
     u1_t       restartCnt;
     u1_t       antennaType;
     dbuf_t     sx1301confJson;
+    int        last_expcmd;
+    // Read Spill Buffer
+    struct {
+        u1_t buf[PIPE_BUF];
+        int off;
+        int exp;
+    } rsb;
 } slave_t;
 
 static int    n_slaves;
@@ -76,7 +83,6 @@ static u4_t     region;
 
 // Fwd decl
 static void restart_slave (tmr_t* tmr);
-
 
 static int read_slave_pipe (slave_t* slave, u1_t* buf, int bufsize, int expcmd, struct ral_response* expresp) {
     u1_t slave_idx = (int)(slave-slaves);
@@ -98,7 +104,8 @@ static int read_slave_pipe (slave_t* slave, u1_t* buf, int bufsize, int expcmd, 
                     rt_usleep(RETRY_PIPE_IO);
                     continue;
                 }
-                LOG(MOD_RAL|ERROR, "Slave (%d) did not sent reply data - expecting cmd=%d", slave_idx, expcmd);
+                LOG(MOD_RAL|WARNING, "Slave (%d) did not send reply data - expecting cmd=%d", slave_idx, expcmd);
+                slave->last_expcmd = expcmd;
                 return expok;
             }
             rt_fatal("Slave (%d) pipe read fail: %s", slave_idx, strerror(errno));
@@ -107,20 +114,43 @@ static int read_slave_pipe (slave_t* slave, u1_t* buf, int bufsize, int expcmd, 
         slave->restartCnt = 0;
         int off = 0;
         while( off < n ) {
+            int dlen = n - off;
             struct ral_header* hdr = (struct ral_header*)&buf[off];
-            if( expcmd >= 0 && n >= off+sizeof(struct ral_response) && hdr->cmd == expcmd ) {
-                *expresp = *(struct ral_response*)hdr;
-                off += sizeof(*expresp);
-                expok = 1;
-                expcmd = -1;
+            int consumed = 0;
+            if( slave->rsb.off ) {
+                assert(slave->rsb.off<slave->rsb.exp);
+                int chunksz = min(slave->rsb.exp-slave->rsb.off, n-off);
+                memcpy(&slave->rsb.buf[slave->rsb.off], &buf[off], chunksz);
+                off += chunksz;
+                slave->rsb.off += chunksz;
+                if( slave->rsb.off < slave->rsb.exp ) {
+                    continue;
+                }
+                hdr = (struct ral_header*)slave->rsb.buf;
+                dlen = slave->rsb.off;
             }
-            else if( n >= off+sizeof(struct ral_timesync_resp) && hdr->cmd == RAL_CMD_TIMESYNC ) {
+            if( expcmd >= 0 && hdr->cmd == expcmd ) {
+                if( (slave->rsb.exp = sizeof(struct ral_response)) > dlen ) goto spill;
+                *expresp = *(struct ral_response*)hdr;
+                consumed = sizeof(*expresp);
+                expok = 1;
+                slave->last_expcmd = expcmd = -1;
+            }
+            else if( slave->last_expcmd >= 0 && hdr->cmd == slave->last_expcmd ) {
+                if( (slave->rsb.exp = sizeof(struct ral_response)) > dlen ) goto spill;
+                LOG(MOD_RAL|WARNING, "Slave (%d) responded to expired synchronous cmd: %d. Ignoring.", slave_idx, hdr->cmd);
+                consumed = sizeof(struct ral_response);
+                slave->last_expcmd = -1;
+            }
+            else if( hdr->cmd == RAL_CMD_TIMESYNC ) {
+                if( (slave->rsb.exp= sizeof(struct ral_timesync_resp)) > dlen ) goto spill;
                 struct ral_timesync_resp* resp = (struct ral_timesync_resp*)hdr;
                 ustime_t delay = ts_updateTimesync(slave_idx, resp->quality, &resp->timesync);
                 rt_setTimer(&slave->tsync, rt_micros_ahead(delay));
-                off += sizeof(*resp);
+                consumed = sizeof(*resp);
             }
-            else if( n >= off+sizeof(struct ral_rx_resp) && hdr->cmd == RAL_CMD_RX ) {
+            else if( hdr->cmd == RAL_CMD_RX ) {
+                if( (slave->rsb.exp = sizeof(struct ral_rx_resp)) > dlen ) goto spill;
                 struct ral_rx_resp* resp = (struct ral_rx_resp*)hdr;
                 rxjob_t* rxjob = !TC ? NULL : s2e_nextRxjob(&TC->s2ctx);
                 if( rxjob != NULL ) {
@@ -141,11 +171,25 @@ static int read_slave_pipe (slave_t* slave, u1_t* buf, int bufsize, int expcmd, 
                 } else {
                     LOG(MOD_RAL|ERROR, "Slave (%d) has RX frame dropped - out of space", slave_idx);
                 }
-                off += sizeof(*resp);
+                consumed = sizeof(*resp);
             }
             else {
                 
-                rt_fatal("Slave (%d) sent unexpected data: cmd=%d size=%d", slave_idx, hdr->cmd, n-off);
+                rt_fatal("Slave (%d) sent unexpected data: cmd=%d size=%d", slave_idx, hdr->cmd, dlen);
+            }
+            if( slave->rsb.off ) {
+                slave->rsb.off = 0;
+            } else {
+                off += consumed;
+            }
+            continue;
+        spill:
+            if( sizeof(slave->rsb.buf)-slave->rsb.off < dlen ) {
+                rt_fatal("Slave (%d) Cannot store data in slave->rsb.buf size=%d slave->rsb.off=%d", slave_idx, n-off, slave->rsb.off);
+            } else {
+                memcpy(&slave->rsb.buf[slave->rsb.off], hdr, dlen);
+                slave->rsb.off += dlen;
+                off += dlen;
             }
         }
         assert(off==n);
@@ -547,6 +591,7 @@ void ral_ini () {
         } else {
             slaves[sidx].antennaType = sx1301conf.antennaType;
         }
+        slaves[sidx].last_expcmd = -1;
     }
     if( !allok )
         rt_fatal("Failed to load/parse some slave config files");

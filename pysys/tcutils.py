@@ -30,6 +30,7 @@ import time
 import re
 import base64
 import os
+import sys
 import struct
 import json
 import asyncio
@@ -42,7 +43,14 @@ import logging
 from id6 import Id6
 import glob
 
-logger = logging.getLogger('test')
+logger = logging.getLogger('_tcutils')
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(logging.Formatter('%(asctime)s [%(name).8s:%(levelname).5s] %(message)s'))
+
+logger.setLevel(logging.DEBUG)
+logger.addHandler(handler)
 
 
 router_config_EU863_6ch = {
@@ -168,17 +176,22 @@ class ServerABC:
 
 
 class Infos(ServerABC):
-    def __init__(self, muxsuri='ws://localhost:6039/router', tlsidentity:Optional[str]=None, tls_no_ca=False):
-        super().__init__(port=6038, tlsidentity=tlsidentity, tls_no_ca=tls_no_ca)
-        print("  INFOS port %d" %(self.port))
+    def __init__(self, muxsuri='ws://localhost:6039/router', tlsidentity:Optional[str]=None, tls_no_ca=False, homedir='.'):
+        super().__init__(port=6038, tlsidentity=homedir+'/'+tlsidentity if tlsidentity else None, tls_no_ca=tls_no_ca)
         self.muxsuri = muxsuri
+        self.homedir = homedir
+        self.tlsidentity = tlsidentity
+
+    async def start_server(self):
+        logger.debug("  Starting INFOS (%s/%s) on Port %d (muxsuri=%s)" %(self.homedir, self.tlsidentity or "", self.port, self.muxsuri))
+        await super().start_server()
 
     async def handle_ws(self, ws, path):
-        print('. INFOS connect: %s from %r' % (path, ws.remote_address))
+        logger.debug('. INFOS connect: %s from %r' % (path, ws.remote_address))
         try:
             while True:
                 msg = json.loads(await ws.recv())
-                print('> INFOS: %r' % msg);
+                logger.debug('> INFOS: %r' % msg);
                 r = msg['router']
                 resp = {
                     'router': r,
@@ -187,7 +200,7 @@ class Infos(ServerABC):
                 }
                 resp = self.router_info_response(resp)
                 await ws.send(json.dumps(resp))
-                print('< INFOS: %r' % resp);
+                logger.debug('< INFOS: %r' % resp);
         except websockets.exceptions.ConnectionClosed as exc:
             if exc.code != 1000:
                 logger.error('x INFOS close: code=%d reason=%r', exc.code, exc.reason)
@@ -203,18 +216,23 @@ class Infos(ServerABC):
 
 
 class Muxs(ServerABC):
-    def __init__(self, tlsidentity:Optional[str]=None, tls_no_ca=False):
-        super().__init__(port=6039, tlsidentity=tlsidentity, tls_no_ca=tls_no_ca)
-        print("  MUXS port %d" %(self.port))
+    def __init__(self, tlsidentity:Optional[str]=None, tls_no_ca=False, homedir='.'):
+        super().__init__(port=6039, tlsidentity=homedir+'/'+tlsidentity if tlsidentity else None, tls_no_ca=tls_no_ca)
+        self.homedir = homedir
+        self.tlsidentity = tlsidentity
         self.router_config = router_config_EU863_6ch
 
+    async def start_server(self):
+        logger.debug("  Starting MUXS (%s/%s) on Port %d" %(self.homedir, self.tlsidentity or "", self.port))
+        await super().start_server()
+
     async def handle_ws(self, ws, path):
-        print('. MUXS connect: %s' % (path,))
+        logger.debug('. MUXS connect: %s' % (path,))
         if path != '/router':
             await ws.close(1020)
         rconf = self.get_router_config()
         await ws.send(json.dumps(rconf))
-        print('< MUXS: router_config.')
+        logger.debug('< MUXS: router_config.')
         await asyncio.sleep(0.1)           # give station some time to setup radio/timesync
         await self.handle_connection(ws)
 
@@ -233,14 +251,13 @@ class Muxs(ServerABC):
                     await self.handle_binaryData(ws, msgtxt)
                     continue
                 msg = json.loads(msgtxt)
-                print('> MUXS: %r' % (msg,))
                 msgtype = msg.get('msgtype')
                 if msgtype:
                     fn = getattr(self, 'handle_'+msgtype, None)
                     if fn:
                         await fn(ws, msg)
                         continue
-                print('  MUXS: ignored msgtype: %s\n%r' % (msgtype, msg))
+                logger.debug('  MUXS: ignored msgtype: %s\n%r' % (msgtype, msg))
         except (asyncio.CancelledError, SystemExit):
             raise
         except websockets.exceptions.ConnectionClosed as exc:
@@ -253,18 +270,21 @@ class Muxs(ServerABC):
             except: pass
 
     async def handle_version(self, ws, msg):
-        print('> MUXS: Station Version: %r' % (msg,))
+        logger.debug('> MUXS: Station Version: %r' % (msg,))
 
 
 class Cups(ServerABC):
-    def __init__(self, tlsidentity:Optional[str]=None, tls_no_ca=False):
-        super().__init__(port=6040, tlsidentity=tlsidentity, tls_no_ca=tls_no_ca)
+    def __init__(self, tlsidentity:Optional[str]=None, tls_no_ca=False, homedir='.', tcdir='.'):
+        super().__init__(port=6040, tlsidentity=homedir+"/"+tlsidentity if tlsidentity else None, tls_no_ca=tls_no_ca)
+        self.homedir = homedir
+        self.tcdir = tcdir
+        self.tlsidentity = tlsidentity
         self.app = web.Application()
-        print("  CUPS port %d" %(self.port))
         for args in [ ('POST', '/update-info', self.handle_update_info), ]:
             self.app.router.add_route(*args)
 
     async def start_server(self):
+        logger.debug("  Starting CUPS (%s/%s) on Port %d" %(self.homedir, self.tlsidentity or "", self.port))
         handler = self.app.make_handler()
         self.server = await self.app.loop.create_server(handler, host='0.0.0.0', port=self.port, **self.tlsctx)
 
@@ -301,43 +321,46 @@ class Cups(ServerABC):
         # For production use str(Id6(id))
         return str(Id6(id).id)
 
-    def readCupsCred(self, routerid, fmt="PEM"):
-        return (self.rdPEM('cups.ca', fmt) +
-                self.rdPEM('cups-router-%s.crt' % routerid, fmt) +
-                self.rdPEM('cups-router-%s.key' % routerid, fmt))
+    def readCupsCred(self, routerid, cupsid, fmt="PEM"):
+        return (self.rdPEM('%s/cups.ca' % cupsid, fmt) +
+                self.rdPEM('%s/cups-router-%s.crt' % (cupsid,routerid), fmt) +
+                self.rdPEM('%s/cups-router-%s.key' % (cupsid,routerid), fmt))
 
     def readTcCred(self, routerid, fmt="PEM"):
-        return (self.rdPEM('tc.ca', fmt) +
-                self.rdPEM('tc-router-%s.crt' % routerid, fmt) +
-                self.rdPEM('tc-router-%s.key' % routerid, fmt))
+        return (self.rdPEM('%s/tc.ca' % self.tcdir, fmt) +
+                self.rdPEM('%s/tc-router-%s.crt' % (self.tcdir,routerid), fmt) +
+                self.rdPEM('%s/tc-router-%s.key' % (self.tcdir,routerid), fmt))
 
     def readRouterConfig(self, id:str) -> Dict[str,Any]:
-        with open('cups-router-%s.cfg' % id) as f:
+        with open('%s/cups-router-%s.cfg' % (self.homedir, id) ) as f:
             d = json.loads(f.read())
-        version = d['version']
-        with open(version+'.bin', 'rb') as f:
-            fwBin = f.read()
+        version = d.get('version', None)
+        fwBin = ''
+        if version:
+            with open(self.homedir+'/'+version+'.bin', 'rb') as f:
+                fwBin = f.read()
+            logger.debug('  CUPS: Target version: %s (%s)', version, self.homedir+'/'+version+'.bin')
+        else:
+            logger.debug('  CUPS: No target version configured for this router. No update.')
         d['fwBin'] = fwBin
         try:
             d['fwSig'] = []
-            for sigkey in glob.iglob('sig*.key', recursive=True):
+            for sigkey in glob.iglob(self.homedir+'/sig*.key', recursive=True):
                 try:
                     with open(sigkey,'rb') as f:
                         key = f.read()
                     crc = crc32(key)
-                    print('Key: %08X %s ' % (crc, sigkey))
-                    sigf = version+'.bin.'+sigkey[:-4]
-                    print(sigf)
+                    logger.debug('  CUPS: Found signing key %s -> CRC %08X' % (sigkey,crc))
+                    sigf = self.homedir+'/'+version+'.bin.'+sigkey.split("/")[1][:-4]
                     with open(sigf, 'rb') as f:
                         fwSig = f.read()
-                    print(len(fwSig))
+                    logger.debug('  CUPS: Found signature %s' % sigf)
                     d['fwSig'].append((crc,fwSig))
                 except Exception as ex:
-                    print("Failed to process sign key %s" % sigkey)
-                    print(ex)
+                    logger.error("x CUPS: Failed reading signin key %s: %s", sigkey, esc, exc_info=True)
         except:
             d['fwSig'] = [(b'', b'\x00'*4)]
-        d['cupsCred'] = self.readCupsCred(id, d.get("credfmt", "DER"))
+        d['cupsCred'] = self.readCupsCred(id, d.get('cupsId') or self.homedir, d.get("credfmt", "DER"))
         d['tcCred']   = self.readTcCred(id, d.get("credfmt", "DER"))
         d['cupsCredCrc'] = crc32(d['cupsCred']) & 0xFFFFFFFF
         d['tcCredCrc']   = crc32(d['tcCred'])   & 0xFFFFFFFF
@@ -345,35 +368,38 @@ class Cups(ServerABC):
 
     def encodeUri(self, key:str, req:Dict[str,Any], cfg:Dict[str,Any]) -> bytes:
         k = key+'Uri'
-        if req[k] == cfg[k]:
+        if not cfg.get(k) or req[k] == cfg[k]:
             return b'\x00'
         s = cfg[k].encode('ascii')
         return struct.pack('<B', len(s)) + s
 
     def encodeCred(self, key:str, req:Dict[str,Any], cfg:Dict[str,Any]) -> bytes:
         k = key+'CredCrc'
-        if req[k] == cfg[k]:
+        if not cfg.get(k) or req[k] == cfg[k]:
             return b'\x00\x00'
         d = cfg[key+'Cred']
         return struct.pack('<H', len(d)) + d
 
     def encodeFw(self, req:Dict[str,Any], cfg:Dict[str,Any]) -> bytes:
-        if req['version'] == cfg['version']:
+        if not cfg.get('version') or req['version'] == cfg['version']:
+            logger.debug('  CUPS: No fw update required')
             return b'\x00\x00\x00\x00'
         fwbin = cfg['fwBin']
         return struct.pack('<I', len(fwbin)) + fwbin
 
     def encodeSig(self, req:Dict[str,Any], cfg:Dict[str,Any]) -> Tuple[bytes, int]:
-        if req['version'] == cfg['version']:
-            return (b'\x00'*4,0)
-        sc = req.get('fwSigCrc')
+        if not cfg.get('version') or req['version'] == cfg['version']:
+            return (b'\x00\x00\x00\x00',0)
+        sc = req.get('keys')
         if sc is None:
-            print('Request does not have a signature CRC!')
+            logger.debug('x CUPS: Request does not contain a signing key CRC!')
+            return (b'\x00\x00\x00\x00',0)
         for (c,s) in cfg['fwSig']:
-            if sc is None or c == int(req['fwSigCrc']):
-                print(len(s))
-                return (struct.pack('<II', len(s)+4, c) + s, c)
-        print('Unable to encode matching signature!')
+            for scn in sc:
+                if c == int(scn):
+                    logger.debug('  CUPS: Found matching signing key with CRC %08X', c)
+                    return (struct.pack('<II', len(s)+4, c) + s, c)
+        logger.debug('x CUPS: Unable to encode matching signature!')
         return (b'\x00'*4,0)
 
     def on_response(self, r_cupsUri:bytes, r_tcUri:bytes, r_cupsCred:bytes, r_tcCred:bytes, r_sig:bytes, r_fwbin:bytes) -> bytes:
@@ -382,13 +408,14 @@ class Cups(ServerABC):
 
     async def handle_update_info(self, request) -> web.Response:
         req = await request.json()
+        logger.debug('> CUPS Request: %r' % req);
 
         routerid  = self.normalizeId(req['router'])
         cfg = self.readRouterConfig(routerid)
 
         version = req.get('package')
         if not version:
-            print('router %s reported nil/unknown firmware!' % (routerid))
+            logger.debug('x CUPS: router %s reported nil/unknown firmware!' % (routerid))
             return web.Response(status=404, text='Nil/unknown firmware')
         req['version'] = version
 
@@ -402,25 +429,23 @@ class Cups(ServerABC):
         r_tcUri           = self.encodeUri ('tc'  , req, cfg)
         r_tcCred          = self.encodeCred('tc'  , req, cfg)
         (r_sig, r_sigCrc) = self.encodeSig(req, cfg)
-        print(r_sig)
         r_fwbin           = self.encodeFw(req, cfg)
 
-        print('Request from %s:\n'
-              '  %r\n'
-              'Response:\n'
-              '  cupsUri : %r\n'
-              '  tcUri   : %r\n'
-              '  cupsCred: %d bytes\n'
-              '  tcCred  : %d bytes\n'
+        logger.debug('< CUPS Response:\n'
+              '  cupsUri : %s %s\n'
+              '  tcUri   : %s %s\n'
+              '  cupsCred: %3d bytes -- %s\n'
+              '  tcCred  : %3d bytes -- %s\n'
               '  sigCrc  : %08X\n'
-              '  sig     : %d bytes\n'
-              '  fw      : %d bytes -- %s\n'
-              % (routerid, req,
-                 r_cupsUri[1:], r_tcUri[1:],
-                 len(r_cupsCred)-2, len(r_tcCred)-2,
+              '  sig     : %3d bytes\n'
+              '  fw      : %3d bytes -- %s'
+              ,  r_cupsUri[1:], ("<- " if r_cupsUri[1:] else "-- ") + "[%s]" % cupsUri,
+                 r_tcUri[1:], ("<- " if r_tcUri[1:] else "-- ") + "[%s]" % tcUri,
+                 len(r_cupsCred)-2, ("[%08X] <- " % cfg['cupsCredCrc'] if len(r_cupsCred)-2 else "") + "[%08X]" % (cupsCrc),
+                 len(r_tcCred)-2  , ("[%08X] <- " % cfg['tcCredCrc'] if len(r_tcCred)-2 else "") + "[%08X]" % (tcCrc),
                  r_sigCrc,
                  len(r_sig)-4, # includes CRC
-                 len(r_fwbin)-4, cfg['version']))
+                 len(r_fwbin)-4, ("[%s] <- " % cfg.get('version') if len(r_fwbin)-4 else "") + "[%s]" % (req['version']))
 
         body = self.on_response(r_cupsUri, r_tcUri, r_cupsCred, r_tcCred, r_sig, r_fwbin)
         return web.Response(body=body)

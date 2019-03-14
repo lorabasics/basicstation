@@ -47,7 +47,7 @@
 #define MAX_CCA_INFOS   10
 #define MAGIC_CCA_FREQ  0xCCAFCCAF
 
-#define RX_NPKTS 10
+#define RX_NPKTS 1000
 
 struct cca_info {
     u4_t freq;
@@ -61,12 +61,14 @@ struct cca_msg {
 };
 
 static sL_t     timeOffset;
-static int      rx_ridx;
-static int      rx_widx;
-static struct lgw_pkt_rx_s rx_pkts[RX_NPKTS+1];
 static struct lgw_pkt_tx_s tx_pkt;
 static sL_t     txbeg;
 static sL_t     txend;
+static struct lgw_pkt_rx_s rx_pkts[RX_NPKTS+1];
+static int      rxblen  = sizeof(rx_pkts[0])*RX_NPKTS;
+static int      rx_ridx = 0;
+static int      rx_widx = 0;
+static u4_t     rx_dsc = 0;
 static u1_t     ppsLatched;
 static aio_t*   aio;
 static tmr_t    conn_tmr;
@@ -78,6 +80,9 @@ uint8_t lgwx_beacon_len = 0;
 uint8_t lgwx_beacon_sf = 0;
 uint8_t lgwx_lbt_mode = 0;
 
+
+#define rbfree(widx,ridx,len) (widx >= ridx ? len-widx : ridx-widx-1)
+#define rbused(widx,ridx,len) (widx >= ridx ? widx-ridx : len-ridx+widx)
 
 static int cca (sL_t txtime, u4_t txfreq) {
     for( int i=0; i<MAX_CCA_INFOS; i++ ) {
@@ -156,17 +161,23 @@ static void try_connecting (tmr_t* tmr) {
 
 static void read_socket (aio_t* aio) {
     while(1) {
-        if( rx_widx >= RX_NPKTS ) {
-            if( rx_ridx == 0 ) {
-                LOG(MOD_SIM|ERROR, "LGWSIM(%s): RX packet lost - buffer full", sockAddr.sun_path);
-                rx_widx = RX_NPKTS-1;
+        u1_t * rxbuf = &((u1_t*)rx_pkts)[rx_widx];
+        int rxlen = 4;
+        if( rx_dsc ) { // Currently discarding bytes until next packet boundary
+            if( rx_dsc % sizeof(rx_pkts[0]) == 0 ) { // Packet boundary
+                LOG(MOD_SIM|ERROR, "LGWSIM(%s): RX buffer full. Dropping frame.", sockAddr.sun_path);
+                rx_dsc = 0;
+                continue;
             } else {
-                memcpy(&rx_pkts[0], &rx_pkts[rx_ridx], sizeof(rx_pkts[0])*(rx_widx-rx_ridx));
-                rx_widx -= rx_ridx;
-                rx_ridx = 0;
+                rxlen = sizeof(rx_pkts[0]) - rx_dsc;
             }
+        } else if( (rxlen = rbfree(rx_widx, rx_ridx, rxblen)) == 0 ) {
+            rx_dsc = rx_widx  % sizeof(rx_pkts[0]);
+            rx_widx -= rx_dsc;
+            rxbuf = &((u1_t*)rx_pkts)[rx_widx];
+            rxlen = sizeof(rx_pkts[0]) - rx_dsc;
         }
-        int n = read(aio->fd, &rx_pkts[rx_widx], sizeof(rx_pkts[0]));
+        int n = read(aio->fd, rxbuf, rxlen);
         if( n == 0 ) {
             LOG(MOD_SIM|ERROR, "LGWSIM(%s) closed (recv)", sockAddr.sun_path);
             rt_yieldTo(&conn_tmr, try_connecting);
@@ -179,13 +190,18 @@ static void read_socket (aio_t* aio) {
             rt_yieldTo(&conn_tmr, try_connecting);
             return;
         }
-        assert(n == sizeof(rx_pkts[0]));
-        if( rx_pkts[rx_widx].freq_hz == MAGIC_CCA_FREQ ) {
-            cca_msg = *(struct cca_msg*)&rx_pkts[rx_widx];
+
+        if( rx_dsc || rbfree(rx_widx, rx_ridx, rxblen) == 0 ) {
+            rx_dsc += n;
             continue;
+        } else {
+            rx_widx = (rx_widx+n) % rxblen;
         }
-        rx_widx += 1;
-        LOG(MOD_SIM|DEBUG, "LGWSIM(%s): %d packets pending", sockAddr.sun_path, rx_widx-rx_ridx);
+
+        if( rbused(rx_widx, rx_ridx, rxblen) >= sizeof(rx_pkts[0]) && rx_pkts[rx_ridx/sizeof(rx_pkts[0])].freq_hz == MAGIC_CCA_FREQ ){
+            cca_msg = *(struct cca_msg*)&rx_pkts[rx_ridx/sizeof(rx_pkts[0])];
+            rx_ridx = (rx_ridx+sizeof(rx_pkts[0])) % rxblen;
+        }
     }
 }
 
@@ -211,9 +227,9 @@ static void write_socket (aio_t* aio) {
 
 int lgw_receive (uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
     int npkts = 0;
-    while( npkts < max_pkt && rx_ridx < rx_widx ) {
-        pkt_data[npkts] = rx_pkts[rx_ridx];
-        rx_ridx += 1;
+    while( npkts < max_pkt && rbused(rx_widx, rx_ridx, rxblen) >= sizeof(rx_pkts[0]) ){
+        pkt_data[npkts] = rx_pkts[rx_ridx/sizeof(rx_pkts[0])];
+        rx_ridx = (rx_ridx+sizeof(rx_pkts[0])) % rxblen;
         npkts += 1;
     }
     if( npkts )
@@ -229,6 +245,8 @@ int lgw_send (struct lgw_pkt_tx_s pkt_data) {
     if( !cca(txbeg, pkt_data.freq_hz) )
         return LGW_LBT_ISSUE;
     tx_pkt = pkt_data;
+    if( !aio || aio->ctx == NULL || aio->fd == 0 )
+        return LGW_HAL_ERROR;
     aio_set_wrfn(aio, write_socket);
     write_socket(aio);
     return LGW_HAL_SUCCESS;

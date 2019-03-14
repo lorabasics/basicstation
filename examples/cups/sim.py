@@ -30,8 +30,8 @@ import sys
 import signal
 import time
 import json
-import asyncio
 import random
+import asyncio
 from asyncio import subprocess
 
 sys.path.append('../../pysys')
@@ -41,27 +41,25 @@ import simutils as su
 import logging
 handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
-handler.setFormatter(logging.Formatter('%(asctime)s [%(name).8s:%(levelname)s] %(message)s'))
+handler.setFormatter(logging.Formatter('%(asctime)s [%(name).8s:%(levelname).5s] %(message)s'))
 
-logger = logging.getLogger('clsA-sim')
+logger = logging.getLogger('cups-sim')
 logger.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
 station = None
 infos = None
 muxs = None
+cups = None
 sim = None
 
-UPLINK_SEND_INTERVAL = 10.0 # Seconds
 
-class ExampleLgwSimServer(su.LgwSimServer):
-    '''Generate an uplink every 10 seconds'''
-
+class TestLgwSimServer(su.LgwSimServer):
     fcnt = 0
     updf_task = None
-    txcnt = 0
 
     async def on_connected(self, lgwsim:su.LgwSim) -> None:
+        self.fcnt = 0
         self.updf_task = asyncio.ensure_future(self.send_updf())
 
     async def on_close(self):
@@ -71,11 +69,10 @@ class ExampleLgwSimServer(su.LgwSimServer):
 
     async def on_tx(self, lgwsim, pkt):
         logger.debug('< LGWSIM TX - %r', pkt)
-        self.txcnt += 1
 
     async def send_updf(self) -> None:
-        '''Send uplinks periodically'''
         try:
+            await asyncio.sleep(1)
             while True:
                 freq = tu.router_config_EU863_6ch['upchannels'][random.randint(0,5)][0] / 1e6
                 logger.debug('> LGWSIM RX - FCnt=%d Freq=%.3fMHz', self.fcnt, freq)
@@ -84,87 +81,106 @@ class ExampleLgwSimServer(su.LgwSimServer):
                 lgwsim = self.units[0]
                 await lgwsim.send_rx(rps=(7,125), freq=freq, frame=su.makeDF(fcnt=self.fcnt, port=1))
                 self.fcnt += 1
-                await asyncio.sleep(UPLINK_SEND_INTERVAL)
+                await asyncio.sleep(5.0)
         except asyncio.CancelledError:
             pass
         except Exception as exc:
-            logger.error("Exception during send_updf: %s", exc, exc_info=True)
+            logger.error('send_updf failed!', exc_info=True)
 
+class TestMuxs(tu.Muxs):
+    station_args = ['station','-p', '--temp', './shome', '--home', './shome']
+    restart_station_handle = None
+    restarts = 1
 
-class ExampleMuxs(tu.Muxs):
-    '''Respond to uplink in the first downlink window'''
+    async def restart_station(self):
+        global station
+        try:
+            while True:
+                if not station:
+                    station = await subprocess.create_subprocess_exec(*self.station_args)
+                retcode = await station.wait()
+                logger.debug('STATION EXIT: code=%d' % (retcode,))
+                if not self.restarts:
+                    sys.stdout.flush()
+                    sys.exit(1 if self.restarts==0 else 0)
+                self.restarts -= 1
+                logger.debug('RESTARTING STATION...: code=%d' % (retcode,))
+                station = None
+        except Exception as exc:
+            logger.error('Error during restart_station: %s', exc, exc_info=True)
 
-    def get_router_config(self):
-        return { **self.router_config, 'MuxTime': time.time(), 'nodc': False }
+    async def handle_connection(self, ws):
+        await super().handle_connection(ws)
 
     async def handle_dntxed(self, ws, msg):
         logger.debug("> MUXS: %r", msg)
 
     async def handle_updf(self, ws, msg):
-        logger.debug("> MUXS: %r", msg)
         fcnt = msg['FCnt']
+        logger.debug("> MUXS: %r", msg)
         port = msg['FPort']
         dnframe = {
-            'msgtype' : 'dnmsg',
-            'dC'      : 0,
+            'msgtype': 'dnmsg',
+            'dC'     : 0,
+            'RX1DR'  : msg['DR'],
+            'RxDelay': 1,
+            'RX1Freq': msg['Freq'],
+            'DevEui' : '00-00-00-00-11-00-00-01',
+            'xtime'  : msg['upinfo']['xtime'],
+            'diid'   : fcnt,
             'priority': 0,
-            'RxDelay' : 1,
-            'RX1DR'   : msg['DR'],
-            'RX1Freq' : msg['Freq'],
-            'DevEui'  : '00-00-00-00-11-00-00-01',
-            'xtime'   : msg['upinfo']['xtime'],
-            'diid'    : fcnt,
-            'MuxTime' : time.time(),
-            'rctx'    : msg['upinfo']['rctx'],
-            'pdu'     : '0A0B0C0D0E0F',
+            'MuxTime': time.time(),
+            'rctx'   : msg['upinfo']['rctx'],
+            'pdu'    : '0A0B0C0D0E0F',
         }
         logger.debug("< MUXS: %r", dnframe)
         await ws.send(json.dumps(dnframe))
 
-async def start_tcsim():
-    global infos
-    global muxs
-    infos = tu.Infos(muxsuri = ('ws://localhost:6039/router'))
-    muxs = ExampleMuxs()
+class TestCups(tu.Cups):
+    qcnt = 0
+
+    def on_response(self, r_cupsUri:bytes, r_tcUri:bytes, r_cupsCred:bytes, r_tcCred:bytes, r_sig:bytes, r_updbin:bytes) -> bytes:
+        try:
+            b = super().on_response(r_cupsUri, r_tcUri, r_cupsCred, r_tcCred, r_sig, r_updbin)
+            if b == b'\x00'*14:
+                self.qcnt += 1
+            return b
+        except Exception as exc:
+            logger.error('on_response failed: %s', exc, exc_info=True)
+
+async def test_start():
+    global station, infos, muxs, cups, sim
+    if not os.path.isfile("prep.done"):
+        logger.warning("Expected file structure not there. Runing prep.sh.")
+        prep = await subprocess.create_subprocess_exec("./prep.sh")
+        ret = await prep.wait()
+        if ret is not 0:
+            logger.debug("Prep.sh script exited with error code: %d. Stopping", ret)
+            os._exit(1)
+    sim = TestLgwSimServer(path='shome/spidev')
+    infos = tu.Infos(muxsuri = ('wss://localhost:6039/router'),
+                     homedir='tc-0',   tlsidentity = 'infos-0')
+    muxs  = TestMuxs(homedir='tc-0',   tlsidentity = 'muxs-0')
+    cups0 = TestCups(homedir='cups-0', tlsidentity = 'cups-0')
+    cups1 = TestCups(homedir='cups-1', tlsidentity = 'cups-1', tcdir='tc-0')
+    cups1.port = 6041
+    await sim.start_server()
     await infos.start_server()
     await muxs.start_server()
-
-async def start_lgwsim():
-    global sim
-    sim = ExampleLgwSimServer()
-    await sim.start_server()
-
-async def start_station():
-    global station
-    # 'valgrind', '--leak-check=full',
-    station_args = ['station','-p', '--temp', '.']
-    station = await subprocess.create_subprocess_exec(*station_args)
-
-async def start_sim():
-    await start_tcsim()
-    await start_lgwsim()
-
-async def start_test():
-    await start_sim()
-    await start_station()
-
-func = None
-if len(sys.argv) > 1:
-    func = {
-        'tc': start_tcsim,
-        'lgwsim': start_lgwsim,
-        'sim': start_sim,
-        'station': start_station
-    }.get(sys.argv[1], None)
-
-if not func:
-    func = start_test
+    await cups0.start_server()
+    await cups1.start_server()
+    if len(sys.argv) > 1 and sys.argv[1] == "runstation":
+        await asyncio.sleep(0.3)    # give python some time to start up
+        muxs.restart_station_handle = asyncio.ensure_future(muxs.restart_station())
 
 def sigHandler(signum, frame):
     logger.debug("Exiting.")
-    if sim and sim.updf_task:
+    if sim.updf_task:
         sim.updf_task.cancel()
         sim.updf_task = None
+    if muxs.restart_station_handle:
+        muxs.restart_station_handle.cancel()
+        muxs.restart_station_handle = None
     global station
     if station:
         station.terminate()
@@ -175,5 +191,5 @@ def sigHandler(signum, frame):
 
 signal.signal(signal.SIGINT, sigHandler)
 
-task = asyncio.ensure_future(func())
+task = asyncio.ensure_future(test_start())
 asyncio.get_event_loop().run_forever()

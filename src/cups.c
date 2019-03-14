@@ -32,6 +32,7 @@
 #include "uj.h"
 #include "kwcrc.h"
 #include "cups.h"
+#include "tc.h"
 
 #include "mbedtls/ecdsa.h"
 #include "mbedtls/error.h"
@@ -97,7 +98,7 @@ static int cups_verifySig (cups_sig_t* sig) {
 
 static void cups_ondone (tmr_t* tmr) {
     if( CUPS == NULL ) {
-        sys_triggerCUPS();
+        sys_triggerCUPS(0);
         return;
     }
 
@@ -108,7 +109,9 @@ static void cups_ondone (tmr_t* tmr) {
     if( CUPS->cstate != CUPS_DONE ) {
         // Someting went wrong - retry again more quickly
         msg = "Interaction with CUPS failed%s - retrying in %~T";
-        if( cups_failCnt > FAIL_CNT_THRES || CUPS->cstate == CUPS_ERR_REJECTED ) {
+        if( cups_failCnt > FAIL_CNT_THRES ||
+            CUPS->cstate == CUPS_ERR_REJECTED ||
+            CUPS->cstate == CUPS_ERR_NOURI ) {
             // Rotate and try REG/BAK/BOOT sets of config files
             cups_credset = (cups_credset+1) % (SYS_CRED_BOOT+1);
         }
@@ -149,7 +152,7 @@ static void cups_ondone (tmr_t* tmr) {
             str_t s = ((uflags & UPDATE_FLAG(TC_URI )) == UPDATE_FLAG(TC_URI ) ? "uri" :
                        (uflags & UPDATE_FLAG(TC_CRED)) == UPDATE_FLAG(TC_CRED) ? "credentials" :
                        "uri/credentials");
-            LOG(MOD_CUP|INFO, "CUPS provided TC updates (%s) - restarting TC engine", s);
+            LOG(MOD_CUP|INFO, "CUPS provided TC updates (%s) %s", s, sys_noTC ? "" : "- restarting TC engine");
             sys_stopTC();
         }
         if( uflags & (UPDATE_FLAG(CUPS_URI)|UPDATE_FLAG(CUPS_CRED)) ) {
@@ -167,6 +170,8 @@ static void cups_ondone (tmr_t* tmr) {
         cups_credset = SYS_CRED_REG;
         cups_failCnt = 0;
     }
+    if( TC && sys_statusTC() == TC_MUXS_CONNECTED )
+        ahead = CUPS_OKSYNC_INTV;
     cups_free(CUPS);
     CUPS = NULL;
     if (log)
@@ -448,7 +453,6 @@ void cups_start (cups_t* cups) {
     str_t cupsuri = sys_uri(SYS_CRED_CUPS, cups_credset);
     if( cupsuri == NULL ) {
         LOG(MOD_CUP|ERROR, "No CUPS%s URI configured", sys_credset2str(cups_credset));
-        cups_credset = (cups_credset+1) % (SYS_CRED_BOOT+1);
         cups_done(cups, CUPS_ERR_NOURI);
         return;
     }
@@ -480,18 +484,24 @@ void cups_start (cups_t* cups) {
     return;
 }
 
+static void delayedCUPSstart(tmr_t* tmr) {
+    LOG(MOD_CUP|INFO, "Starting a CUPS session now.");
+    cups_start(CUPS);
+}
 
-void sys_triggerCUPS () {
-    if( CUPS != NULL )
+void sys_triggerCUPS (int delay) {
+    if( CUPS != NULL || sys_noCUPS )
         return;  // interaction pending
 #if defined(CFG_cups_exclusive)
-    LOG(MOD_CUP|INFO, "Stopping TC and starting CUPS");
-    sys_stopTC();
+    if( !sys_noTC ) {
+        LOG(MOD_CUP|INFO, "Stopping TC in favor of CUPS");
+        sys_stopTC();
+    }
 #endif // defined(CFG_cups_exclusive)
-    LOG(MOD_CUP|INFO, "Starting a CUPS session");
+    LOG(MOD_CUP|INFO, "Starting a CUPS session in %d seconds.", delay);
     sys_inState(SYSIS_CUPS_INTERACT);
     CUPS = cups_ini();
-    cups_start(CUPS);
+    rt_setTimerCb(&CUPS->timeout, rt_seconds_ahead(delay), delayedCUPSstart);
 }
 
 
@@ -504,8 +514,10 @@ void sys_clearCUPS () {
 }
 
 void sys_delayCUPS () {
-    if( sys_statusCUPS() < 0 )
+    if( sys_statusCUPS() < 0 ) {
+        LOG(MOD_CUP|INFO, "Next CUPS interaction delayed by %~T.", CUPS_OKSYNC_INTV);
         rt_setTimer(&cups_sync_tmr, rt_micros_ahead(CUPS_OKSYNC_INTV));
+    }
 }
 
 s1_t sys_statusCUPS () {

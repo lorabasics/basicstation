@@ -43,13 +43,13 @@ The following is a three-step quick start guide on how to build and run Station.
 #### Step 1: Cloning the Station Repository
 
 ``` sourceCode
-git clone https://github.com/lorabasics/station.git $STATION_REPO
+git clone https://github.com/lorabasics/basicstation.git
 ```
 
 #### Step 2: Compiling the Station Binary
 
 ``` sourceCode
-cd $STATION_REPO
+cd basicstation
 make platform=rpi variant=std
 ```
 
@@ -62,7 +62,7 @@ The build process consists of the following steps:
 #### Step 3: Running the Example Configuration on a Raspberry Pi
 
 ``` sourceCode
-cd $STATION_REPO/examples/live-s2.sm.tc
+cd examples/live-s2.sm.tc
 RADIODEV=/dev/spidev0.0 ../../build-rpi-std/bin/station
 ```
 
@@ -76,12 +76,14 @@ Next,
 
 *  consult the help menu of Station via `station --help`,
 *  inspect the `station.conf` and `cups-boot.*` [example configuration files](/examples/live-s2.sm.tc),
-*  tune your local [configuration](https://doc.sm.tc/station/conf.html).
+*  tune your local [configuration](https://doc.sm.tc/station/conf.html),
+*  learn how to [compile Station](https://doc.sm.tc/station/compile.html) for your target platform.
 
 Check out the other examples:
 
-*  [Simulation Example](/examples/simulation)
-*  [Station to Pkfwd Protocol Bridge Example](/examples/station2pkfwd)
+*  [Simulation Example](/examples/simulation) - An introduction to the simulation environment.
+*  [CUPS Example](/examples/cups) - Demonstration of the CUPS protocol within the simulation environment.
+*  [Station to Pkfwd Protocol Bridge Example](/examples/station2pkfwd) - Connect Basic Station to LNS supporting the legacy protocol.
 
 ## Usage
 
@@ -113,16 +115,17 @@ Usage: station [OPTION...]
                              then keep only FILE. If ROT is 1 then keep one
                              more old log file around. Overrides environment
                              STATION_LOGFILE.
-  -N, --no-tc                Do not connect to a LNS. Only run CUPS functionality.
+  -N, --no-tc                Do not connect to a LNS. Only run CUPS
+                             functionality.
   -p, --params               Print current parameter settings.
   -t, --temp=DIR             Temp directory for frequently written files.
                              Default is /tmp. Overrides environment
                              STATION_TEMPDIR.
   -x, --eui-prefix=id6       Turn MAC address into EUI by adding this prefix.
-                             If the argument has value ff:fe00:0 then the EUI is
-                             formed by inserting FFFE in the middle. If absent
-                             use MAC or routerid as is. Overrides environment
-                             STATION_EUIPREFIX.
+                             If the argument has value ff:fe00:0 then the EUI
+                             is formed by inserting FFFE in the middle. If
+                             absent use MAC or routerid as is. Overrides
+                             environment STATION_EUIPREFIX.
   -?, --help                 Give this help list
       --usage                Give a short usage message
   -v, --version              Print station version.

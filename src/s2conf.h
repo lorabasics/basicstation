@@ -112,7 +112,7 @@ enum {  MAX_RMTSH = DFLT_MAX_RMTSH };
 
 enum {  RTT_SAMPLES     = 100 };
 enum {  MAX_WSSFRAMES   =  32 };
-enum {  MIN_UPJSON_SIZE = 256 };
+enum {  MIN_UPJSON_SIZE = 384 };
 enum {  MAX_TXUNITS     = DFLT_MAX_TXUNITS };
 enum {  MAX_TXJOBS      = DFLT_MAX_TXJOBS  };
 enum {  MAX_TXFRAME_LEN =  255 };

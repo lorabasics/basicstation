@@ -206,8 +206,8 @@ void rxq_ini (rxq_t* rxq) {
 // Return NULL if no more space
 rxjob_t* rxq_nextJob (rxq_t* rxq) {
     rxjob_t* jobs = rxq->rxjobs;
-    u1_t first = rxq->first;
-    u1_t next = rxq->next;
+    rxidx_t first = rxq->first;
+    rxidx_t next = rxq->next;
     if( first==next ) {
         rxq->first = rxq->next = 0;
         jobs[0].off = jobs[0].len = 0;

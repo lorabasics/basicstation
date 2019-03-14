@@ -149,56 +149,12 @@ static sL_t       last_xtime;
 static tmr_t      rxpollTmr;
 static tmr_t      syncTmr;
 
-#if defined(CFG_testpin)
-static rps_t      testpin_rps;
-static u1_t       testpin_mode;
-static sL_t       testpin_xtime_beg;
-static sL_t       testpin_xtime_end;
-#endif // defined(CFG_testpin)
 
 
 // ATTR_FASTCODE 
 static void synctime (tmr_t* tmr) {
     timesync_t timesync;
-#if defined(CFG_testpin)
-    sL_t last_xtime_bak = last_xtime;
-#endif
     int quality = ral_getTimesync(pps_en, &last_xtime, &timesync);
-#if defined(CFG_testpin)
-    if( sys_modePPS == PPS_TESTPIN ) {
-        // The PPS pin is not a 1Hz pulse used for time sync
-        // but is raised by a device under test to signal the time
-        // of certain operations (TX end, start of RX)
-        sL_t pps_xtime = timesync.pps_xtime;
-        sL_t d = pps_xtime - last_xtime_bak;
-        if( d > 100 && TC && testpin_mode ) {
-            // PPS latch is not filled with last enabling time.
-            // A testpin edge seems to have happend
-            ujbuf_t sendbuf = (TC->s2ctx.getSendbuf)(&TC->s2ctx, MIN_UPJSON_SIZE);
-            if( sendbuf.buf != NULL ) {
-                // Websocket has space
-                LOG(MOD_RAL|WARNING, "Testpin mode - latched %s PPS @%R: %lX vs [%lX..%lX]",
-                    testpin_mode==1 ? "DN":"UP", testpin_rps,
-                    pps_xtime, testpin_xtime_beg, testpin_xtime_end);
-                uj_encOpen(&sendbuf, '{');
-                uj_encKVn(&sendbuf,
-                          "msgtype",   's', "testpin",
-                          "mode",      's', testpin_mode==1 ? "dn" : "up",
-                          "sf",        'i', 12 - rps_sf(testpin_rps),
-                          "bw",        'i', 125 * (1<<rps_bw(testpin_rps)),
-                          "xtime_pin", 'I', pps_xtime,
-                          "xtime_beg", 'I', testpin_xtime_beg,
-                          "xtime_end", 'I', testpin_xtime_end,
-                          NULL);
-                uj_encClose(&sendbuf, '}');
-                (*TC->s2ctx.sendText)(&TC->s2ctx, &sendbuf);
-                testpin_mode = 0;
-            }
-        }
-        // Clear - testpin mode is not a PPS pulse
-        timesync.pps_xtime = 0;
-    }
-#endif // defined(CFG_testpin)
     ustime_t delay = ts_updateTimesync(0, quality, &timesync);
     rt_setTimer(&syncTmr, rt_micros_ahead(delay));
 }
@@ -241,24 +197,6 @@ int ral_tx (txjob_t* txjob, s2ctx_t* s2ctx, int nocca) {
         }
         return RAL_TX_NOCA;
     }
-#if defined(CFG_testpin)
-    // If testpin mode and we have an UP data frame addressing LWTESTAPP port
-    if( sys_modePPS == PPS_TESTPIN && pkt_tx.size >= 13 &&
-        ((pkt_tx.payload[0] & 0xE0) == 0x60 || (pkt_tx.payload[0] & 0xE0) == 0xA0) &&
-            pkt_tx.size >= 13 + (pkt_tx.payload[5] & 0xF) &&
-            pkt_tx.payload[8+(pkt_tx.payload[5] & 0xF)] == 224 ) {
-        // then trigger time sync some while after TX has ended.
-        // Thereby reading PPS register which should have recorded testpin edge set by device.
-        ustime_t airtime = s2e_calcDnAirTime(rps, pkt_tx.size);
-        testpin_xtime_beg = txjob->xtime;
-        testpin_xtime_end = txjob->xtime + airtime;
-        testpin_rps = rps;
-        testpin_mode = 1;  // DN
-        rt_setTimer(&syncTmr, rt_millis_ahead(200)+airtime);  // after TX has ended
-        LOG(MOD_RAL|WARNING, "Testpin mode - TX frame @%R: %lu/%lX .. %lu/%lX",
-            rps, testpin_xtime_beg, testpin_xtime_beg, testpin_xtime_end, testpin_xtime_end);
-    }
-#endif // defined(CFG_testpin)
     return RAL_TX_OK;
 }
 
@@ -326,23 +264,6 @@ static void rxpolling (tmr_t* tmr) {
         }
         s2e_addRxjob(&TC->s2ctx, rxjob);
 
-#if defined(CFG_testpin)
-        // If testpin mode and we have an UP data frame addressing LWTESTAPP port
-        if( sys_modePPS == PPS_TESTPIN && pkt_rx.size >= 13 &&
-            ((pkt_rx.payload[0] & 0xE0) == 0x40 || (pkt_rx.payload[0] & 0xE0) == 0x80) &&
-            pkt_rx.size >= 13 + (pkt_rx.payload[5] & 0xF) &&
-            pkt_rx.payload[8+(pkt_rx.payload[5] & 0xF)] == 224 ) {
-            // then trigger time sync after a while.
-            // Thereby reading PPS register which should have recorded testpin edge set by device.
-            testpin_xtime_end = rxjob->xtime;
-            testpin_xtime_beg = rxjob->xtime - s2e_calcUpAirTime(rps, pkt_rx.size);
-            testpin_rps = rps;
-            testpin_mode = 2;   // UP
-            rt_setTimer(&syncTmr, rt_millis_ahead(200));
-            LOG(MOD_RAL|WARNING, "Testpin mode - UP frame @ %R: %lu/%lX..%lu/%lX",
-                rps, testpin_xtime_beg, testpin_xtime_beg, testpin_xtime_end, testpin_xtime_end);
-        }
-#endif // defined(CFG_testpin)
     }
     s2e_flushRxjobs(&TC->s2ctx);
     rt_setTimer(tmr, rt_micros_ahead(RX_POLL_INTV));

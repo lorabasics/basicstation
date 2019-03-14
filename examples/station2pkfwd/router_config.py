@@ -126,7 +126,7 @@ def ini(paths:List[str]) -> None:
         p = Path(s)
         f = p.joinpath('regions.yaml')
         if f.exists():
-            regions = yaml.load(f.read_text())
+            regions = yaml.load(f.read_text(), Loader=yaml.SafeLoader)
             for regionid,o in regions.items():
                 regionid2region[regionid] = Region(o)
             logger.info('router_config.ini: loaded regions from %s.' % (f))
@@ -139,7 +139,7 @@ def ini(paths:List[str]) -> None:
                 try:
                     routerid = Id6(name[:-5])
                     if routerid.cat == 'router':
-                        rc = RouterConfig(routerid, yaml.load(f.read_text()))
+                        rc = RouterConfig(routerid, yaml.load(f.read_text(), Loader=yaml.SafeLoader))
                         routerid2config[routerid] = rc
                         logger.info('router_config.ini: loaded router configuration from %s.' % (f))
                     else:

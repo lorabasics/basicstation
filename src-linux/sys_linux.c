@@ -80,6 +80,7 @@ u1_t  sys_deviceMode;
 u1_t  sys_modePPS;      // special mode?
 u2_t  sys_webPort;
 u1_t  sys_noTC;
+u1_t  sys_noCUPS;
 
 extern str_t  homeDir;
 extern str_t  tempDir;
@@ -377,6 +378,9 @@ void sys_ini () {
         if( gpsDevice )
             LOG(MOD_SYS|INFO, "GPS device: %s", gpsDevice);
     }
+    if( sys_noTC || sys_noCUPS ) {
+        LOG(MOD_SYS|WARNING, "Station in NO-%s mode", sys_noTC ? "TC" : "CUPS");
+    }
     int seed;
     sys_seed((u1_t*)&seed, sizeof(seed));
     srand(seed);
@@ -517,6 +521,7 @@ int sys_execCommand (ustime_t max_wait, str_t* argv) {
     while( argv[argc] ) argc++;
     if( argc == 0 || (argc==1 && argv[0][0]==0) )
         return 0;
+    sys_flushLog();
     pid_t pid1;
     if( (pid1 = fork()) == 0 ) {
         pid_t pid2 = 0;
@@ -540,7 +545,6 @@ int sys_execCommand (ustime_t max_wait, str_t* argv) {
             }
             for( int i=0; argv[i]; i++ )
                 LOG(MOD_SYS|DEBUG, "%s argv[%d]: <%s>\n", i==0?"execvp":"      ", i, argv[i]);
-            sys_flushLog();
 
             if( execvp(argv[0], (char*const*)argv) == -1 ) {
                 LOG(MOD_SYS|ERROR, "%s: Failed to exec: %s", argv[0], strerror(errno));
@@ -993,7 +997,7 @@ static void startupMaster2 (tmr_t* tmr) {
     sys_iniTC();
     sys_startTC();
     sys_iniCUPS();
-    sys_triggerCUPS();
+    sys_triggerCUPS(0);
     sys_iniWeb();
 }
 
@@ -1044,7 +1048,7 @@ static void startupDaemon (tmr_t* tmr) {
         rt_fatal("DAEMON: Failed to fork station: %s", strerror(errno));
     if( subprocPid == 0 ) {
         // Child
-        sys_iniLogging(&logfile, 0); // stop capture stdio
+        sys_iniLogging(&logfile, 1);
         LOG(MOD_SYS|INFO, "DAEMON: Station process %d started...", getpid());
         rt_yieldTo(&startupTmr, startupMaster);
     } else {
@@ -1251,7 +1255,7 @@ int sys_main (int argc, char** argv) {
     }
 
     aio_ini();
-    sys_iniLogging(&logfile, !isSlave);
+    sys_iniLogging(&logfile, !isSlave && !daemon);
     sys_ini();
     rt_ini();
     ts_iniTimesync();

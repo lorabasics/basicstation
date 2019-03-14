@@ -63,6 +63,7 @@ static pthread_cond_t   condvar = PTHREAD_COND_INITIALIZER;
 static pthread_t        thr;
 static int              thrUp = 0;
 
+static int orig_stderr = STDERR_FILENO;
 
 // Fwd decl
 static void addLog (const char *logline, int len);
@@ -118,7 +119,7 @@ static void stdout_read(aio_t* aio) {
 static void writeLogData (const char *data, int len) {
     if( !logfile || !logfile->path ) {
       log2stderr:
-        if( write(STDERR_FILENO, data, len) == -1 )
+        if( write(orig_stderr, data, len) == -1 )
             sys_fatal(FATAL_NOLOGGING);
         return;
     }
@@ -249,6 +250,7 @@ void sys_iniLogging (struct logfile* lf, int captureStdio) {
             int flags = fcntl(fds[1], F_GETFL, 0);
             if( flags != -1 )
                 fcntl(fds[1], F_SETFL, flags & ~O_NONBLOCK);
+            orig_stderr = dup(STDERR_FILENO);
             dup2(fds[1], STDOUT_FILENO);
             dup2(fds[1], STDERR_FILENO);
             close(fds[1]);

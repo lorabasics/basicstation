@@ -70,6 +70,8 @@ void selftest_txq () {
 
     xprintf(&B, "%J", &txq.txjobs[0]);
     TCHECK(strcmp("::0 diid=0 [ant#0]", B.buf) == 0);
+    rt_free(B.buf);
+    B.buf = NULL;
 
     txjob_t* j;
 
@@ -155,7 +157,7 @@ void selftest_txq () {
 
     heads[0] = TXIDX_END;
     TCHECK(NULL == txq_unqJob(&txq, &heads[0]));
-    free(_txq);
+    rt_free(_txq);
 }
 
 #define rxq (*_rxq)
@@ -198,6 +200,6 @@ void selftest_rxq () {
             TCHECK(rxq.rxjobs[i-1].off + rxq.rxjobs[i-1].len == rxq.rxjobs[i].off);
         }
     }
-    free(_rxq);
+    rt_free(_rxq);
 }
 

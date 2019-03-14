@@ -156,7 +156,8 @@ dbuf_t readFile (str_t file, int complain) {
         b.bufsize = b.pos = n;
         b.buf[b.bufsize] = 0;  // make it zero terminated if used as a string
     }
-    fs_close(fd);
+    if (fd != -1)
+        fs_close(fd);
     return b;
 }
 
@@ -281,6 +282,8 @@ int checkUris () {
 
     for( int cat=0; cat < nFN_CAT; cat++ ) {
         str_t scheme = cat == FN_CUPS ? "http" : "ws";
+        if( cat == FN_TC && sys_noTC ) continue;
+        int nuriscat = nuris;
         for( int set=FN_REG; set <= FN_BOOT; set++ ) {
             char host[MAX_HOSTNAME_LEN];
             char port[MAX_PORT_LEN];
@@ -293,10 +296,14 @@ int checkUris () {
                 nuris++;
             }
         }
+        if( nuriscat == nuris && cat == FN_CUPS ) {
+            sys_noCUPS = 1;
+        }
     }
     if( nuris == 0 ) {
         printf("No server URIs configured - expecting at least one of the following files to exist:\n");
         for( int cat=0; cat < nFN_CAT; cat++ ) {
+            if( cat == FN_TC && sys_noTC ) continue;
             for( int set=FN_REG; set <= FN_BOOT; set++ ) {
                 printf("   %s\n", configFilename(cat, set, FN_URI));
             }
@@ -571,7 +578,7 @@ void sys_credComplete (int cred_cat, int len) {
     data[SYS_CRED_MYKEY]  = pendData+ko; datalen[SYS_CRED_MYKEY]  = kl;
 
     u1_t * p = (u1_t*)pendData;
-    LOG(INFO, "credComplete - trust_off=%4u, trust_len=%4u             %02x %02x %02x %02x  %02x %02x %02x %02x",
+    LOG(INFO, "credComplete - trust_off=%4u, trust_len=%4u               %02x %02x %02x %02x  %02x %02x %02x %02x",
         to, tl,                                     p[to+0], p[to+1], p[to+2], p[to+3],p[to+4], p[to+5], p[to+6], p[to+7]
     );
     LOG(INFO, "credComplete - cert_off =%4u, cert_len =%4u  %02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x",

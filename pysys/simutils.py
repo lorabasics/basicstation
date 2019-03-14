@@ -26,16 +26,21 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from typing import Any,Dict,List,Tuple
-from pprint import pprint, pformat
 import os
+import sys
 import asyncio
 import socket
 import struct
 import time
 import logging
 
-logger = logging.getLogger('test')
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(logging.Formatter('%(asctime)s [%(name).8s:%(levelname).5s] %(message)s'))
 
+logger = logging.getLogger('simutils')
+logger.setLevel(logging.DEBUG)
+logger.addHandler(handler)
 
 STAT_CRC_OK = 0x10
 
@@ -161,7 +166,7 @@ class LgwSimServer:
         self.units = {}
 
     async def start_server(self):
-        print('  LgwSimServer starting...')
+        logger.debug('  LgwSimServer starting...')
         if os.path.exists(self.path):
             os.unlink(self.path)   # avoid "address already in use" if file exists
         self.sock = await asyncio.start_unix_server(self.connected, self.path)
@@ -179,7 +184,7 @@ class LgwSimServer:
         timeOffset = (pkt['freq_hz']<<32) + pkt['count_us']
         unitIdx = pkt['f_dev']
         lgwsim = self.make_lgwsim(unitIdx, timeOffset, reader, writer)
-        print('  LgwSimServer: SPI device #%d connected (timeOffset=0x%X xticksNow=0x%X)' % (unitIdx, timeOffset, lgwsim.xticks()))
+        logger.debug('  LgwSimServer: SPI device #%d connected (timeOffset=0x%X xticksNow=0x%X)' % (unitIdx, timeOffset, lgwsim.xticks()))
         self.units[unitIdx] = lgwsim
         await self.on_connected(lgwsim)
 
@@ -200,6 +205,7 @@ class LgwSim:
         self.reader = reader
         self.writer = writer
         self.timeOffset = timeOffset
+        # self.timeOffset = int(time.monotonic()*1e6) - 0x10200000
         self.read_task = asyncio.ensure_future(self.read_loop())
 
     def xticks(self) -> int:
@@ -221,13 +227,18 @@ class LgwSim:
             while True:
                 p = await self.reader.read(SIZE_PKT_TX)
                 if p == b'':  # EOF
-                    print('  LGWSIM(%d) - read EOF' % self.unitIdx)
+                    logger.debug('  LGWSIM(%d) - read EOF' % self.unitIdx)
                     break
                 else:
                     pkt = unpack_pkt_tx(p)
                     await self.on_tx(pkt)
+        except BrokenPipeError:
+            pass
+        except ConnectionResetError:
+            pass
         except Exception as exc:
             logger.error('  LGWSIM(%d): Exception: %s', self.unitIdx, exc, exc_info=True)
+        logger.debug('  LGWSIM(%d): Closing.', self.unitIdx)
         await self.server.on_close()
         self.server.units.pop(self.unitIdx,None)
 
@@ -237,7 +248,7 @@ class LgwSim:
             'payload': frame
         }
         add_rps(pkt, rps)
-        p = pack_pkt_rx(pkt, self.xticks())
+        p = pack_pkt_rx(pkt, rxtime or self.xticks())
         self.writer.write(p)
         await self.writer.drain()
 

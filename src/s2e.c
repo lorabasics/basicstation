@@ -862,7 +862,8 @@ static int handle_router_config (s2ctx_t* s2ctx, ujdec_t* D) {
 #if defined(CFG_prod)
         case J_nocca:
         case J_nodc:
-        case J_nodwell: {
+        case J_nodwell:
+        case J_device_mode: {
             LOG(MOD_S2E|WARNING, "Feature not supported in production level code (router_config) - ignored: %s", D->field.name);
             uj_skipValue(D);
             break;
@@ -878,6 +879,10 @@ static int handle_router_config (s2ctx_t* s2ctx, ujdec_t* D) {
         }
         case J_nodwell: {
             dwellDisabled = uj_bool(D) ? 2 : 1;
+            break;
+        }
+        case J_device_mode: {
+            sys_deviceMode = uj_bool(D) ? 1 : 0;
             break;
         }
 #endif // !defined(CFG_prod)

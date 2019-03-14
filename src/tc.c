@@ -341,10 +341,10 @@ void tc_start (tc_t* tc) {
 void tc_continue (tc_t* tc) {
     s1_t tstate = tc->tstate;
 
-    if (tc->tstate == TC_ERR_REJECTED || tc->retries >= 10) {
+    if( (tc->tstate == TC_ERR_REJECTED || tc->retries >= 10) && !sys_noCUPS ) {
         LOG(MOD_TCE|INFO, "Router rejected or retry limit reached. Invoking CUPS in 30 seconds.");
         sys_stopTC();
-        rt_setTimerCb(&tc->timeout, rt_seconds_ahead(30), sys_triggerCUPS);
+        sys_triggerCUPS(30);
         return;
     }
 
@@ -378,7 +378,7 @@ void tc_continue (tc_t* tc) {
         tc->retries = 1;
     }
 
-    int backoff = min(tc->retries, 10);
+    int backoff = min(tc->retries, 6);
     tc->tstate = TC_INFOS_BACKOFF;
     rt_setTimerCb(&tc->timeout, rt_seconds_ahead(backoff * 10), tc->ondone);
     LOG(MOD_TCE|INFO, "INFOS reconnect backoff %ds (retry %d)", backoff*10, tc->retries);

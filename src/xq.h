@@ -89,6 +89,7 @@ void     txq_commitJob   (txq_t* txq, txjob_t*j);
 
 
 typedef u2_t rxoff_t;
+typedef u1_t rxidx_t;
 
 typedef struct rxjob {
     sL_t     rctx;
@@ -104,8 +105,8 @@ typedef struct rxjob {
 typedef struct rxq {
     rxjob_t rxjobs[MAX_RXJOBS];
     u1_t    rxdata[MAX_RXDATA];
-    u1_t    first;   // first filled job
-    u1_t    next;    // next job to fill
+    rxidx_t first;   // first filled job
+    rxidx_t next;    // next job to fill
 } rxq_t;
 
 
