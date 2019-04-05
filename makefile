@@ -1,3 +1,5 @@
+IMAGE=krishnaiyer/basicstation
+TAG=0.0.1
 TD=.
 include ${TD}/setup.gmk
 
@@ -51,3 +53,7 @@ clean super-clean: clean-build
 	for d in deps/*; do \
 	  ${MAKE} -C $$d $@; \
 	done
+
+.PHONY: docker
+docker:
+	docker build -t $(IMAGE):$(TAG) .
