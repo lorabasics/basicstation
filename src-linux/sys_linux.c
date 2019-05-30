@@ -724,8 +724,8 @@ static int parseStationConf () {
                 case J_nodc:
                 case J_nodwell:
                 case J_device_mode: {
-                    LOG(MOD_S2E|WARNING, "Feature not supported in production level code (station.conf) - ignored: %s", D->field.name);
-                    uj_skipValue(D);
+                    LOG(MOD_S2E|WARNING, "Feature not supported in production level code (station.conf) - ignored: %s", D.field.name);
+                    uj_skipValue(&D);
                     break;
                 }
 #else // !defined(CFG_prod)
