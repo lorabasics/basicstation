@@ -22,7 +22,7 @@ ARCH.kerlink = arm-klk-linux-gnueabi
 ARCH=${ARCH.${platform}}
 
 export TDfull := $(shell cd ${TD} && pwd)
-TOOLCHAIN=${HOME}/toolchain-${platform}
+TOOLCHAIN ?= ${HOME}/toolchain-${platform}
 
 
 ifeq (,$(wildcard ${TOOLCHAIN}))
@@ -43,11 +43,11 @@ ifeq (kerlink,${platform})
 export LD_LIBRARY_PATH=${TOOLCHAIN}/usr/lib
 endif
 
-CC=${TOOLPREFIX}gcc
-LD=${TOOLPREFIX}ld
-AR=${TOOLPREFIX}ar
-OD=${TOOLPREFIX}objdump
-OC=${TOOLPREFIX}objcopy
+CC ?= ${TOOLPREFIX}gcc
+LD ?= ${TOOLPREFIX}ld
+AR ?= ${TOOLPREFIX}ar
+OD ?= ${TOOLPREFIX}objdump
+OC ?= ${TOOLPREFIX}objcopy
 
 # Everything being build is somewhere in here
 BD=build-${platform}-${variant}
