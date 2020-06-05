@@ -1,3 +1,27 @@
+# --- Revised 3-Clause BSD License ---
+# Copyright Semtech Corporation 2020. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without modification,
+# are permitted provided that the following conditions are met:
+#
+#     * Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
+#       this list of conditions and the following disclaimer in the documentation
+#       and/or other materials provided with the distribution.
+#     * Neither the name of the Semtech corporation nor the names of its
+#       software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 # -*- makefile -*-
 
 # Top dir of s2core
@@ -17,6 +41,9 @@ variant  ?= std
 LOCAL_ARCH := $(shell gcc -dumpmachine)
 
 ARCH.linux   = x86_64-linux-gnu
+ARCH.linuxV2 = x86_64-linux-gnu
+ARCH.linuxpico = x86_64-linux-gnu
+ARCH.corecell  = arm-linux-gnueabihf
 ARCH.rpi     = arm-linux-gnueabihf
 ARCH.kerlink = arm-klk-linux-gnueabi
 ARCH=${ARCH.${platform}}
@@ -38,16 +65,17 @@ else
 TOOLPREFIX=${TOOLCHAIN}/bin/${ARCH}-
 endif
 
-ifeq (kerlink,${platform})
-# Needed for loader to find libmpfr.so.4
-export LD_LIBRARY_PATH=${TOOLCHAIN}/usr/lib
-endif
-
 CC=${TOOLPREFIX}gcc
 LD=${TOOLPREFIX}ld
 AR=${TOOLPREFIX}ar
 OD=${TOOLPREFIX}objdump
 OC=${TOOLPREFIX}objcopy
+
+ifeq (kerlink,${platform})
+# Needed for loader to find libmpfr.so.4
+export LD_LIBRARY_PATH=${TOOLCHAIN}/usr/lib
+endif
+
 
 # Everything being build is somewhere in here
 BD=build-${platform}-${variant}
@@ -70,6 +98,9 @@ CFG.debugn  = logini_lvl=DEBUG selftests tlsdebug ral_master_slave
 
 # -- Platform specific
 CFG.linux   = linux lgw1 no_leds
+CFG.linuxpico = linux lgw1 no_leds smtcpico
+CFG.linuxV2 = linux lgw2 no_leds lgw2genkey
+CFG.corecell = linux lgw1 no_leds sx1302
 CFG.rpi     = linux lgw1 no_leds
 CFG.kerlink = linux lgw1 no_leds
 
@@ -82,6 +113,9 @@ UTILS.linux = mtuns
 UTILS = $(or ${UTILS.${platform}}, ${UTILS.default})
 
 DEPS.default = mbedtls lgw
+DEPS.linuxpico = mbedtls smtcpico
+DEPS.linuxV2 = mbedtls lgw2
+DEPS.corecell = mbedtls lgw1302
 DEPS.rpi     = mbedtls lgw
 
 DEPS = $(or ${DEPS.${platform}}, ${DEPS.default})
@@ -98,6 +132,9 @@ ifneq (minihub,$(platform))
 SYSLIBS  = -lm
 endif
 
+CFLAGS.linuxpico.debug = -g -O0
+CFLAGS.corecell.debug = -g -O0
+CFLAGS.linuxpico.debugn = -g -O0
 CFLAGS.linux.testsim  = -g -O0 --coverage
 CFLAGS.linux.testms   = -g -O0 --coverage
 CFLAGS.linux.testfs   = -g -O0 --coverage
@@ -105,6 +142,9 @@ CFLAGS.linux.testpin  = -g -O3
 CFLAGS.linux.std      = -g -O3
 
 LIBS.linux   = -llgw   ${MBEDLIBS}      -lpthread
+LIBS.linuxV2 = -llgw2  ${MBEDLIBS} -lrt -lpthread -lspi
+LIBS.linuxpico = -llgw ${MBEDLIBS}      -lpthread
+LIBS.corecell = -llgw1302  ${MBEDLIBS}      -lpthread -lrt
 LIBS.rpi     = -llgw   ${MBEDLIBS}      -lpthread
 LIBS.kerlink = -llgw   ${MBEDLIBS} -lrt -lpthread
 

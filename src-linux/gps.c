@@ -1,30 +1,29 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #if defined(CFG_nogps)
@@ -44,10 +43,14 @@ int sys_enableGPS (str_t _device) {
 #include <errno.h>
 #include <termios.h>
 
-#include "s2conf.h"
 #include "rt.h"
-#include "tc.h"
 #include "sys_linux.h"
+
+#include "s2e.h"
+#include "tc.h"
+
+#include "sys.h"
+#include "s2conf.h"
 
 
 #if defined(CFG_ubx)
@@ -214,26 +217,108 @@ static int send_alarm (str_t fmt, ...) {
 }
 
 
+str_t GPSEV_MOVE = "move";
+str_t GPSEV_FIX = "fix";
+str_t GPSEV_NOFIX = "nofix";
+
+static int send_gpsev_fix(str_t gpsev, float lat, float lon, float alt, float dilution, int satellites, int quality, float from_lat, float from_lon) {
+    assert(gpsev == GPSEV_MOVE  || gpsev == GPSEV_FIX || gpsev == GPSEV_NOFIX);
+    ujbuf_t sendbuf = (*TC->s2ctx.getSendbuf)(&TC->s2ctx, MIN_UPJSON_SIZE);
+    if( sendbuf.buf == NULL ) {
+        LOG(MOD_S2E|ERROR, "Failed to send gps event, no buffer space");
+        return 0;
+    }
+    uj_encOpen(&sendbuf, '{');
+    uj_encKVn(&sendbuf,
+            "msgtype",    's', "event",
+            "evcat",      's', "gps",
+            "evmsg",      '{',
+            /**/ "evtype",     's', gpsev,
+            /**/ "lat",        'g', lat,
+            /**/ "lon",        'g', lon,
+            /**/ "alt",        'g', alt,
+            /**/ "dilution",   'g', dilution,
+            /**/ "satellites", 'i', satellites,
+            /**/ "quality",    'i', quality,
+            "}",
+            NULL);
+    uj_encClose(&sendbuf, '}');
+    (*TC->s2ctx.sendText)(&TC->s2ctx, &sendbuf);
+
+    if( gpsev == GPSEV_FIX ) {
+        LOG(MOD_GPS|INFO, "GPS fix: %.7f,%.7f alt=%.1f dilution=%f satellites=%d quality=%d",
+            lat, lon, alt, dilution, satellites, quality);
+        return send_alarm("{\"msgtype\":\"alarm\","
+                            "\"text\":\"GPS fix: %.7f,%.7f alt=%.1f dilution=%f satellites=%d quality=%d\"}",
+                            lat, lon, alt, dilution, satellites, quality);
+    } else {
+        LOG(MOD_GPS|INFO, "GPS move %.7f,%.7f => %.7f,%.7f (alt=%.1f dilution=%f satellites=%d quality=%d)",
+            from_lat, from_lon, lat, lon, alt, dilution, satellites, quality);
+        return send_alarm("{\"msgtype\":\"alarm\","
+                            "\"text\":\"GPS move %.7f,%.7f => %.7f,%.7f (alt=%.1f dilution=%f satellites=%d quality=%d)\"}",
+                            from_lat, from_lon, lat,lon, alt, dilution, satellites, quality);
+    }
+}
+
+
+static int send_gpsev_nofix(ustime_t since) {
+    ujbuf_t sendbuf = (*TC->s2ctx.getSendbuf)(&TC->s2ctx, MIN_UPJSON_SIZE);
+    if( sendbuf.buf == NULL ) {
+        LOG(MOD_S2E|ERROR, "Failed to send gps event', no buffer space");
+        return 0;
+    }
+    uj_encOpen(&sendbuf, '{');
+    uj_encKVn(&sendbuf,
+        "msgtype",    's', "event",
+        "evcat",      's', "gps",
+        "evmsg",      '{',
+        /**/ "evtype",    's', GPSEV_NOFIX,
+        /**/ "since",     'I', since,
+        "}",
+        NULL);
+    uj_encClose(&sendbuf, '}');
+    (*TC->s2ctx.sendText)(&TC->s2ctx, &sendbuf);
+
+    LOG(MOD_GPS|INFO, "GPS nofix: since %~T", since);
+
+    return send_alarm("{\"msgtype\":\"alarm\","
+        "\"text\":\"No GPS fix since %~T\"}", since);
+}
+
+
+
+
+static float nmea_p2dec(float lat, char d) {
+  s4_t dd = (s4_t)(lat/100);
+  float ss = lat - dd * 100;
+  float dec = (ss/60.0 + dd);
+  return (d == 'S' || d == 'W') ? (-1 * dec) : dec;
+}
+
+
 static void nmea_gga (char* p) {
     double time_of_fix, lat, lon, dilution, alt;
     char *latD, *lonD;
+    char *pp = p;
     sL_t quality, satellites;
     if( !nmea_float  (&p, &time_of_fix) ||
-        !nmea_float  (&p, &lat) ||
-        !nmea_str    (&p, 1, &latD) ||
-        !nmea_float  (&p, &lon) ||
-        !nmea_str    (&p, 1, &lonD) ||
-        !nmea_decimal(&p, &quality) ||
-        !nmea_decimal(&p, &satellites) ||
-        !nmea_float  (&p, &dilution) ||
-        !nmea_float  (&p, &alt) ) {
-        LOG(MOD_GPS|ERROR, "Failed to parse GPS GGA sentence: %s", p);
+        !nmea_float  (&p, &lat        ) ||
+        !nmea_str    (&p, 1, &latD    ) ||
+        !nmea_float  (&p, &lon        ) ||
+        !nmea_str    (&p, 1, &lonD    ) ||
+        !nmea_decimal(&p, &quality    ) ||
+        !nmea_decimal(&p, &satellites ) ||
+        !nmea_float  (&p, &dilution   ) ||
+        !nmea_float  (&p, &alt        )) {
+        int len = 0;
+        while (pp[len]>31 && pp[len]<128 && ++len );
+        LOG(MOD_GPS|ERROR, "Failed to parse GPS GGA sentence: (len=%d) %.*s", len, len, pp);
         return;
     }
-    s4_t lati = (s4_t)lat/100;
-    lat = (latD[0] == 'E' ? -1 : 1) * lati +  (lat - lati*100)/60.0;
-    s4_t loni = (s4_t)lon/100;
-    lon = (lonD[0] == 'S' ? -1 : 1) * loni +  (lon - loni*100)/60.0;
+
+    lat = nmea_p2dec(lat, latD[0]);
+    lon = nmea_p2dec(lon, lonD[0]);
+    LOG(MOD_GPS|XDEBUG, "nmea_gga: lat %f, lon %f", lat, lon);
 
     if( (quality == 0) ^ (last_quality == 0) )
         time_fixchange = rt_getTime();
@@ -241,18 +326,22 @@ static void nmea_gga (char* p) {
     int fix = (quality == 0 ? -1 : 1);
     ustime_t now = rt_getTime();
     ustime_t delay = GPS_REPORT_DELAY;
+
+    //if (fix > 0) {
+    //  send_gpsev_fix(GPSEV_FIX, lat, lon, alt, dilution, satellites, quality, 0.0, 0.0);
+    //} else {
+    //  send_gpsev_nofix(0);
+    //}
+
     if( last_reported_fix <= 0 && fix > 0 && now > time_fixchange + delay &&
-        send_alarm("{\"msgtype\":\"alarm\","
-                   "\"text\":\"GPS fix: %.7f,%.7f alt=%.1f dilution=%f satellites=%d quality=%d\"}",
-                   lat, lon, alt, dilution, satellites, quality) ) {
+        send_gpsev_fix(GPSEV_FIX, lat, lon, alt, dilution, satellites, quality, 0.0, 0.0)) {
         last_reported_fix = fix;
         nofix_backoff = 0;
     }
     if( fix < 0 ) {
         ustime_t thres = time_fixchange + (1<<nofix_backoff)*delay;
         if( now > thres &&
-            send_alarm("{\"msgtype\":\"alarm\","
-                       "\"text\":\"No GPS fix since %~T\"}", time_fixchange-now) ){
+            send_gpsev_nofix(time_fixchange-now)) {
             last_reported_fix = fix;
             nofix_backoff = max(nofix_backoff+1, 16);
         }
@@ -260,7 +349,7 @@ static void nmea_gga (char* p) {
 
     if( quality > 0 ) {
         if( check_tolerance(orig_lat, lat, 0.001) ||
-            check_tolerance(orig_lon, lon, 0.002) ) {
+            check_tolerance(orig_lon, lon, 0.001) ) {
             // GW changed position
             char json[100];
             dbuf_t jbuf = dbuf_ini(json);
@@ -282,10 +371,14 @@ static void nmea_gga (char* p) {
     last_quality = quality;
 
     if( report_move &&
-        send_alarm("{\"msgtype\":\"alarm\","
-                   "\"text\":\"GPS move %.7f,%.7f => %.7f,%.7f (alt=%.1f dilution=%f satellites=%d quality=%d)\"}",
-                   from_lat, from_lon, orig_lat, orig_lon, alt, dilution, satellites, quality) ) {
+        send_gpsev_fix(GPSEV_MOVE, lat, lon, alt, dilution, satellites, quality, from_lon, from_lon)) {
+        //send_alarm("{\"msgtype\":\"alarm\","
+      //"\"text\":\"GPS move %.7f,%.7f => %.7f,%.7f (alt=%.1f dilution=%f satellites=%d quality=%d)\"}",
+      //           from_lat, from_lon, orig_lat, orig_lon, alt, dilution, satellites, quality) ) {
         report_move = 0;
+        //LOG(MOD_GPS|INFO, "GPS move %.7f,%.7f => %.7f,%.7f (alt=%.1f dilution=%f satellites=%d quality=%d)",
+        //  from_lat, from_lon, orig_lat, orig_lon, alt, dilution, satellites, quality);
+
     }
 }
 
@@ -479,6 +572,13 @@ static int gps_reopen () {
 }
 
 
+int sys_getLatLon (double* lat, double* lon) {
+    *lat = orig_lat;
+    *lon = orig_lon;
+    return 1;
+}
+
+
 //
 // NOTE: Reading NMEA sentences from a GPS device is not used to sync time in any way.
 // This information is only indicative of having a fix (and how good) and is used to
@@ -521,3 +621,4 @@ int sys_enableGPS (str_t _device) {
 }
 
 #endif
+

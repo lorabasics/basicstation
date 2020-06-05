@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.4 - 2020-03-17
+
+* lgw1302: Added sx1302 hal and integrated with corecell platform
+* sys_linux: Fixed decoder pointer dereferencing (#39)
+* s2e: Fixed memory corruption bug in JoinEui filter parsing (#31)
+* s2e: Added DR and Freq fields to dntxed message (#37)
+* s2e: Added error message type for printing LNS error into Station's log (#33)
+* s2e: Added fts field to updf message
+* net: Added Websocket PONG (#29)
+* net: Added option for TLS server name indication/verification
+* rt: Added MCU clock drift compensation for UTC time offset
+* ral: Fixed dntxed message for short transmissions
+* ral: Added Automatic channel allocation feature
+* ral: Added fine timestamping in lgw2
+* ral: Added automatic AES key derivation in lgw2
+* ral: Added support for smtcpico platform (experimental) (#16)
+* timesync: Correct UTC offset in case PPS offset is known
+* lgwsim: Added lgw2 support
+* pysys: Fixed Id6 category parsing (#28)
+* tests: Added regression tests
+* tests: Added Dockerfile
+
 ## 2.0.3 - 2019-03-14
 
 * sys_linux: Fixed stdout/stderr redirection for logging

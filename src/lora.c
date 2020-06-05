@@ -1,30 +1,29 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "s2conf.h"
@@ -85,13 +84,16 @@ u4_t  s2e_netidFilter[4] = { 0xffFFffFF, 0xffFFffFF, 0xffFFffFF, 0xffFFffFF };
 
 
 int s2e_parse_lora_frame (ujbuf_t* buf, const u1_t* frame , int len, dbuf_t* lbuf) {
+    if( len == 0 ) {
+    badframe:
+        LOG(MOD_S2E|DEBUG, "Not a LoRaWAN frame: %16.4H", len, frame);
+        return 0;
+    }
     int ftype = frame[OFF_mhdr] & MHDR_FTYPE;
-    if( (len < OFF_df_minlen) ||    
+    if( (len < OFF_df_minlen && ftype != FRMTYPE_PROP) ||
         // (FTYPE_BIT(ftype) & DNFRAME_TYPE) != 0 || --- because of device_mode feature we parse everything
         (frame[OFF_mhdr] & (MHDR_RFU|MHDR_MAJOR)) != MAJOR_V1 ) {
-    badframe:
-        LOG(MOD_S2E|DEBUG, "Not a LoRaWAN UP frame: %16.4H", len, frame);
-        return 0;
+	goto badframe;
     }
     if( ftype == FRMTYPE_PROP || ftype == FRMTYPE_JACC ) {
         str_t msgtype = ftype == FRMTYPE_PROP ? "propdf" : "jacc";
@@ -126,13 +128,13 @@ int s2e_parse_lora_frame (ujbuf_t* buf, const u1_t* frame , int len, dbuf_t* lbu
         uj_encKVn(buf,
                   "msgtype", 's', msgtype,
                   "MHdr",    'i', mhdr,
-                  "JoinEui", 'E', joineui,
-                  "DevEui",  'E', deveui,
+                  rt_joineui,'E', joineui,
+                  rt_deveui, 'E', deveui,
                   "DevNonce",'i', devnonce,
                   "MIC",     'i', mic,
                   NULL);
-        xprintf(lbuf, "%s MHdr=%02X JoinEui=%:E DevEui=%:E DevNonce=%d MIC=%d",
-                msgtype, mhdr, joineui, deveui, devnonce, mic);
+        xprintf(lbuf, "%s MHdr=%02X %s=%:E %s=%:E DevNonce=%d MIC=%d",
+                msgtype, mhdr, rt_joineui, joineui, rt_deveui, deveui, devnonce, mic);
         return 1;
     }
     u1_t foptslen = frame[OFF_fctrl] & 0xF;
@@ -167,4 +169,49 @@ int s2e_parse_lora_frame (ujbuf_t* buf, const u1_t* frame , int len, dbuf_t* lbu
             foptslen, &frame[OFF_fopts],
             max(0, len-4-portoff), &frame[portoff], mic, len);
     return 1;
+}
+
+
+static int crc16_no_table(uint8_t* pdu, int len) {
+    uint32_t remainder = 0;
+    uint32_t polynomial = 0x1021;
+    for( int i=0; i<len; i++ ) {
+        remainder ^= pdu[i] << 8;
+        for( int bit=0; bit < 8; bit++ ) {
+            if( remainder & 0x8000 ) {
+                remainder = (remainder << 1) ^ polynomial;
+            } else {
+                remainder <<= 1;
+            }
+        }
+    }
+    return remainder & 0xFFFF;
+}
+
+
+
+// Pack parameters into a BEACON pdu with the following layout:
+//    | 0-n |       4    |  2  |     1    |  3  |  3  | 0-n |  2  |   bytes - all fields little endian
+//    | RFU | epoch_secs | CRC | infoDesc | lat | lon | RFU | CRC |
+//
+void s2e_make_beacon (uint8_t* layout, sL_t epoch_secs, int infodesc, double lat, double lon, uint8_t* pdu) {
+    int time_off     = layout[0];
+    int infodesc_off = layout[1];
+    int bcn_len      = layout[2];
+    memset(pdu, 0, bcn_len);
+    for( int i=0; i<4; i++ ) 
+        pdu[time_off+i] = epoch_secs>>(8*i);
+    uint32_t ulon = (uint32_t)(lon / 180 * (1U<<31));
+    uint32_t ulat = (uint32_t)(lat /  90 * (1U<<31));
+    for( int i=0; i<3; i++ ) {
+        pdu[infodesc_off+1+i] = ulon>>(8*i);
+        pdu[infodesc_off+4+i] = ulat>>(8*i);
+    } 
+    pdu[infodesc_off] = infodesc;
+    int crc1 = crc16_no_table(&pdu[0],infodesc_off-2);
+    int crc2 = crc16_no_table(&pdu[infodesc_off], bcn_len-2-infodesc_off);
+    for( int i=0; i<2; i++ ) {
+        pdu[infodesc_off-2] = crc1>>(8*i);
+        pdu[bcn_len-2]      = crc2>>(8*i);
+    }
 }

@@ -1,0 +1,177 @@
+#!/bin/bash
+
+# --- Revised 3-Clause BSD License ---
+# Copyright Semtech Corporation 2020. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without modification,
+# are permitted provided that the following conditions are met:
+#
+#     * Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright notice,
+#       this list of conditions and the following disclaimer in the documentation
+#       and/or other materials provided with the distribution.
+#     * Neither the name of the Semtech corporation nor the names of its
+#       contributors may be used to endorse or promote products derived from this
+#       software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+R=$(echo -e "\033[31m")
+G=$(echo -e "\033[32m")
+B=$(echo -e "\033[34m")
+X=$(echo -e "\033[0m")
+
+cd $(dirname $0)
+
+mkdir -p t.log
+variants="testsim testms"
+tests="$(echo test[0-9]*-*)"
+
+verbose=0
+nohw=0
+forcebuild=0
+cleanrun=0
+travis=0
+
+export IGNORE="livecups"
+
+while [ "$1" != "" ]; do
+    case $1 in
+        -v | --verbose ) verbose=1    ;;
+        -n | --nohw )    export IGNORE="-hw$|$IGNORE";;
+        -b | --build )   forcebuild=1 ;;
+        -c | --clean )   cleanrun=1   ;;
+        -t | --travis )  travis=1     ;;
+    esac
+    shift
+done
+
+set -e
+btarget=""
+[[ $forcebuild -eq 1 ]] && btarget="deps s-clean s-all"
+# Make sure variants are up-to-date
+for variant in $variants; do
+    [[ $travis -eq 1 ]] && echo "travis_fold:start:build.$variant"
+    echo "Build $variant"
+    variant=$variant make -C .. $btarget
+    [[ $travis -eq 1 ]] && echo "travis_fold:end:build.$variant"
+done
+set +e
+
+
+onego=1
+fails=0
+allok=1
+tdir=t.log
+
+# If previous has all tests ok then remove directory
+# and start over with a new test.
+for testdir in $tests; do
+    rvar=$variants
+    [[ $testdir =~ "-hw" ]] && rvar="hardware"
+    for variant in $rvar; do
+        test="${testdir}__$variant"
+        tfile="$tdir/ok-$test.log"
+        if [ ! -f "$tfile" ]; then
+            allok=0
+            break
+        fi
+    done
+done
+if [[ $allok -eq 1 ]] || [[ cleanrun -eq 1 ]]; then
+    echo "Removing logs of successful regression tests."
+    rm -f $tdir/*
+fi
+
+for testdir in $tests; do
+    rvar=$variants
+    [[ $testdir =~ "-hw" ]] && rvar="hardware"
+    for variant in $rvar; do
+        test="${testdir}__$variant"
+        tfile="$tdir/fail-$test.log"
+        tfileOK="$tdir/ok-$test.log"
+        tfileOFF="$tdir/off-$test.log"
+        if [ -f "$tfileOK" ]; then
+            onego=0
+            echo "${B}Test already passed in previous run: $test${X}"
+            continue
+        fi
+        beg=$(date +%s)
+        f="tlog/$test.log"
+        if [[ $travis -eq 1 ]]; then
+            echo "travis_fold:start:$test"
+            echo "Running $test"
+        else
+            echo -ne "Running $test...\r"
+        fi
+        set -o pipefail
+        if [[ "$IGNORE" != "" ]] && [[ "$testdir" =~ $IGNORE ]]; then
+            echo "--- Test N/A ---" > "$tfile"
+        elif [[ $verbose -eq 1 ]]; then
+            TEST_VARIANT=$variant make -C $testdir | tee "$tfile" 2>&1
+        else
+            TEST_VARIANT=$variant make -C $testdir >"$tfile" 2>&1
+        fi
+        xcode=$?
+        set +o pipefail
+        [[ $travis -eq 1 ]] && echo "travis_fold:end:$test"
+        end=$(date +%s)
+        mins=$(printf "[%3dsecs]" $(($end-$beg)))
+        if grep -- "--- Test N/A ---" "$tfile" >/dev/null 2>&1; then
+            mv "$tfile" "$tfileOFF"
+            echo "${B}$mins Test n/a: $test${X}"
+        else
+            if [ $xcode -eq 0 ]; then
+                mv "$tfile" "$tfileOK"
+                echo "${G}$mins Test completed: $test${X}"
+            else
+                echo "${R}$mins Test FAILED:    $test		- details see '$tfile'.${X}"
+                ((fails++))
+            fi
+        fi
+    done
+done
+
+if [[ $verbose -eq 1 ]]; then
+    echo "__ Summary _________________________________"
+    for testdir in $tests; do
+        rvar=$variants
+        [[ $testdir =~ "-hw" ]] && rvar="hardware"
+        for variant in $rvar; do
+            test="${testdir}__$variant"
+            tfileOK="$tdir/ok-$test.log"
+            tfileOFF="$tdir/off-$test.log"
+            printf ' Test %-26s    ' $test
+            if [  -f "$tfileOK" ]; then
+                echo "[${G}PASSED${X}]"
+            elif [ -f "$tfileOFF" ]; then
+                echo "[${B}N/A${X}]"
+            else
+                echo "[${R}FAILED${X}]"
+            fi
+        done
+    done
+fi
+
+if [[ $fails -ne 0 ]]; then
+    echo "${R}$fails tests failed - fix the problems and rerun this script.${X}"
+    echo "Check the files '$tdir/fail-*.log'."
+    exit 2
+fi
+if [[ $onego -eq 0 ]]; then
+    echo "${G}All tests completed - ${R}however not in a single run.${X}"
+    echo "Your fixes might have broken earlier tests."
+    echo "For maximum safety remove $tdir directory and rerun this script...or dont."
+    exit 1
+fi
+echo "${G}All tests completed in a single run.${X}"

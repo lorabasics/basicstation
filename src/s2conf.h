@@ -1,30 +1,29 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef _s2conf_h_
@@ -43,23 +42,32 @@
 #define DFLT_TC_SEND_BUFSZ        (80*1024)
 #define DFLT_RADIO_INIT_WAIT    "\"200ms\""
 #define DFLT_MAX_TXUNITS                  4
+#define DFLT_MAX_130X                     8
 #define DFLT_MAX_TXJOBS                 128
 #define DFLT_MAX_RXJOBS                  64
 #define DFLT_RADIODEV  "\"/dev/spidev?.0\""
 #define DFLT_TX_MIN_GAP          "\"10ms\""   // worst case for ODU as of 07.2018 (horrible SPI performance)
 #define DFLT_TX_AIM_GAP          "\"20ms\""   //  -ditto-
+#define DFLT_TX_MAX_AHEAD        "\"600s\""
 #define DFLT_TXCHECK_FUDGE        "\"5ms\""
 /* TCP keepalive */
-#define DFLT_TCP_KEEPALIVE             "1"    // Connections use keep alive
+#define DFLT_TCP_KEEPALIVE              "1"   // Connections use keep alive
 #define DFLT_TCP_KEEPIDLE              "60"   // Connection idle time (in seconds) before sending keepalive probes
 #define DFLT_TCP_KEEPINTVL             "15"   // The time (in seconds) between individual keepalive probes
 #define DFLT_TCP_KEEPCNT                "4"   // The maximum number of keepalive probes sent before dropping the connection
 
 #define DFLT_MAX_RMTSH                    2   // The maximum number of keepalive probes sent before dropping the connection
+#define DFLT_BEACON_INTVL        "\"128s\""   // Time between beacons in microseconds
 
 
 
 
+#if defined(CFG_platform_cisco) || defined(CFG_platform_rpi64)
+#undef DFLT_TX_MIN_GAP
+#undef DFLT_TX_AIM_GAP
+#define DFLT_TX_MIN_GAP          "\"10ms\""
+#define DFLT_TX_AIM_GAP          "\"60ms\""
+#endif // defined(CFG_platform_cisco)
 
 
 
@@ -106,6 +114,8 @@ enum {  MAX_CMDARGS = 64 };
 enum {  MUXS_PROTOCOL_VERSION = 2 };
 enum {  MAX_RMTSH = DFLT_MAX_RMTSH };
 
+enum {  LOGLINE_LEN = 512 };
+
 // --------------------------------------------------------------------------------
 // Lora processing
 // --------------------------------------------------------------------------------
@@ -114,6 +124,7 @@ enum {  RTT_SAMPLES     = 100 };
 enum {  MAX_WSSFRAMES   =  32 };
 enum {  MIN_UPJSON_SIZE = 384 };
 enum {  MAX_TXUNITS     = DFLT_MAX_TXUNITS };
+enum {  MAX_130X        = DFLT_MAX_130X };
 enum {  MAX_TXJOBS      = DFLT_MAX_TXJOBS  };
 enum {  MAX_TXFRAME_LEN =  255 };
 enum {  MAX_RXFRAME_LEN =  255 };
@@ -176,9 +187,12 @@ CONF_PARAM(TIMESYNC_LNS_RETRY  , ustime, tspan_s ,           "\"71ms\"", "resend
 CONF_PARAM(TIMESYNC_LNS_PAUSE  , ustime, tspan_s ,             "\"5s\"", "pause after unsuccessful volley of timesync messages")
 CONF_PARAM(TIMESYNC_LNS_BURST  , u4    , u4      ,                 "10", "volley of timesync messages before pausing")
 CONF_PARAM(TIMESYNC_REPORTS    , ustime, tspan_s ,             "\"5m\"", "report interval for current timesync status")
-CONF_PARAM(TX_MIN_GAP          , ustime, tspan_s,       DFLT_TX_MIN_GAP, "min distance between two frames being TXed")
-CONF_PARAM(TX_AIM_GAP          , ustime, tspan_s,       DFLT_TX_AIM_GAP, "aim for this TX lead time, if delayed should not fall under min")
-CONF_PARAM(TXCHECK_FUDGE       , ustime, tspan_s,    DFLT_TXCHECK_FUDGE, "check radio state this time into ongoing TX")
+CONF_PARAM(TX_MIN_GAP          , ustime, tspan_s ,      DFLT_TX_MIN_GAP, "min distance between two frames being TXed")
+CONF_PARAM(TX_AIM_GAP          , ustime, tspan_s ,      DFLT_TX_AIM_GAP, "aim for this TX lead time, if delayed should not fall under min")
+CONF_PARAM(TX_MAX_AHEAD        , ustime, tspan_s ,    DFLT_TX_MAX_AHEAD, "maximum time message can be scheduled into the future")
+CONF_PARAM(TXCHECK_FUDGE       , ustime, tspan_s ,   DFLT_TXCHECK_FUDGE, "check radio state this time into ongoing TX")
+CONF_PARAM(BEACON_INTVL        , ustime, tspan_s ,    DFLT_BEACON_INTVL, "beaconing interval")
+CONF_PARAM(TLS_SNI             ,     u4,    bool ,               "true", "Set and verify server name of TLS connections")
 
 #endif // _s2conf_x_
 

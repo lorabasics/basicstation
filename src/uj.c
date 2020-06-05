@@ -1,30 +1,29 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <stdarg.h>
@@ -125,6 +124,23 @@ static void parseString (ujdec_t* dec) {
                 if( c < 0 ) {
                     uj_error(dec, "Malformed \\u escape sequence");
                     // NOT REACHED
+                }
+                if( c >= (1<<7) ) {
+                    char cu[2];
+                    int ci;
+                    if( c < (1<<11) ) {  // 2^7 <= c < 2^11   ==> 5+6 bits
+                        ci = 1;
+                        cu[1] = 0xC0 | (c>>6);   // encode 5 bits
+                    } else {             // 2^11 <= c < 2^16  ==> 4+6+6 bits
+                        ci = 0;
+                        cu[0] = 0xE0 | (c>>12);  // encode 4 bits
+                        cu[1] = 0x80 | ((c>>6)&0x3F);   // 6 bits
+                    }
+                    for(; ci < 2; ci++ ) {
+                        if( wp ) *wp++ = cu[ci];
+                        crc = UJ_UPDATE_CRC(crc,cu[ci]);
+                    }
+                    c = 0x80|(c&0x3F);  // encode 6 bits
                 }
                 break;
             }
@@ -785,7 +801,7 @@ void uj_encStr (ujbuf_t* b, const char* s) {
         case '\r': c = 'r'; break;
         case '\t': c = 't'; break;
         default:
-            if( c < 0x20 ) {
+            if( c >=0 && c < 0x20 ) {
                 addChar(b,'\\');
                 addChar(b,'u');
                 addHex2(b,0);

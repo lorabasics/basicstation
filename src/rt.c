@@ -1,35 +1,38 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "sys.h"
 #include "rt.h"
 
+// More recent version of protocol uses standards compliant
+// fields with capital EUI spelling
+str_t rt_deveui  = "DevEui";
+str_t rt_joineui = "JoinEui";
 
 // We're using a simple linked list.
 // Complexity is O(n) but we don't expect to have many entries on a router.
@@ -38,6 +41,7 @@ static tmr_t* timerQ = TMR_END;
 static dbuf_t features;
 
 ustime_t rt_utcOffset;
+ustime_t rt_utcOffset_ts;
 
 
 void rt_usleep (sL_t us) {
@@ -125,7 +129,9 @@ void rt_ini() {
     // If system does not have a native UTC time then sys_utc() returns zero and we run with
     // ustime_t (time since startup) for the time being. Once we get a connection to TC we
     // replace this offset with MuxTime which is the servers UTC time.
-    rt_utcOffset = sys_utc() - rt_getTime();
+    ustime_t now = rt_getTime();
+    rt_utcOffset = sys_utc() - now;
+    rt_utcOffset_ts = now;
 }
 
 

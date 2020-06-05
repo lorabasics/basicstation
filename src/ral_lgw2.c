@@ -1,33 +1,36 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #if defined(CFG_lgw2)
+
+#if defined(CFG_ral_master_slave)
+#error ral_master_slave not compatible with lgw2
+#endif
 
 #include "s2conf.h"
 #include "tc.h"
@@ -40,6 +43,7 @@
 #include "sx1301v2conf.h"
 #include "ral.h"
 #include "lgw2/sx1301ar_err.h"
+#include "lgw2/sx1301ar_gps.h"
 #include "lgw2/spi_linuxdev.h"
 
 static u1_t       pps_en;
@@ -103,11 +107,23 @@ static void ral_rps2lgw (rps_t rps, sx1301ar_tx_pkt_t* p) {
     if( rps_sf(rps) == FSK ) {
         p->modulation = MOD_FSK;
         p->modrate    = MR_57600;
+        p->f_dev      = 25;
+        p->preamble   = 5;
     } else {
         p->modulation = MOD_LORA;
         p->modrate    = SF_MAP[rps_sf(rps)];
         p->bandwidth  = BW_MAP[rps_bw(rps)];
     }
+}
+
+int ral_rps2bw (rps_t rps) {
+    assert(rps != RPS_ILLEGAL);
+    return BW_MAP[rps_bw(rps)];
+}
+
+int ral_rps2sf (rps_t rps) {
+    assert(rps != RPS_ILLEGAL);
+    return SF_MAP[rps_sf(rps)];
 }
 
 // Make a clock sync measurement:
@@ -130,6 +146,11 @@ int ral_getTimesync (u1_t pps_en, sL_t* last_xtime, timesync_t* timesync) {
         // Signal no PPS
         timesync->pps_xtime = 0;
     }
+    u4_t hs_pps = 0;
+    if( sx1301ar_get_trighs(SX1301AR_BOARD_MASTER, &hs_pps) != 0 ) hs_pps = 0;
+    
+    sx1301ar_tref_t tref = sx1301ar_init_tref();
+    sx1301ar_set_xtal_err(0,tref);
     ustime_t t0 = rt_getTime();
     u4_t xticks = 0;
     if( sx1301ar_get_instcnt(SX1301AR_BOARD_MASTER, &xticks) != 0 )
@@ -144,15 +165,20 @@ int ral_getTimesync (u1_t pps_en, sL_t* last_xtime, timesync_t* timesync) {
     }
     timesync->xtime = *last_xtime += d;
     timesync->ustime = (t0+t1)/2;
+    if( pps_en ) {
+        timesync->pps_xtime = timesync->xtime + (s4_t)(pps_xticks - xticks);
+    } else {
+        // Signal no PPS
+        timesync->pps_xtime = 0;
+    }
     return (int)(t1-t0);
   failed:
     LOG(MOD_SYN|CRITICAL, "SX1301 time sync failed: %s", sx1301ar_err_message(sx1301ar_errno));
     return INT_MAX;
 }
 
-
 static void synctime (tmr_t* tmr) {
-    timesync_t timesync;
+    timesync_t timesync = {0};
     int quality = ral_getTimesync(pps_en, &last_xtime, &timesync);
     ustime_t delay = ts_updateTimesync(0, quality, &timesync);
     rt_setTimer(&syncTmr, rt_micros_ahead(delay));
@@ -167,21 +193,26 @@ u1_t ral_altAntennas (u1_t txunit) {
 int ral_tx (txjob_t* txjob, s2ctx_t* s2ctx, int nocca) {
     sx1301ar_tx_pkt_t pkt_tx = sx1301ar_init_tx_pkt();
 
-    if( txjob->txflags & TXFLAG_BCN ) {
-        pkt_tx.tx_mode = TX_ON_GPS;
-        pkt_tx.preamble = 10;
+    if( txjob->preamble == 0 ) {
+        if( txjob->txflags & TXFLAG_BCN ) {
+            pkt_tx.tx_mode = TX_ON_GPS;
+            pkt_tx.preamble = 10;
+        } else {
+            pkt_tx.tx_mode = TX_TIMESTAMPED;
+            pkt_tx.preamble = 8;
+        }
     } else {
-        pkt_tx.tx_mode = TX_TIMESTAMPED;
-        pkt_tx.preamble = 8;
+        pkt_tx.preamble = txjob->preamble;
     }
-    ral_rps2lgw(s2e_dr2rps(s2ctx, txjob->dr), &pkt_tx);
+    rps_t rps = s2e_dr2rps(s2ctx, txjob->dr);
+    ral_rps2lgw(rps, &pkt_tx);
     pkt_tx.freq_hz    = txjob->freq;
     pkt_tx.count_us   = txjob->xtime;
     pkt_tx.rf_chain   = 0;  
     pkt_tx.rf_power   = (float)(txjob->txpow - txpowAdjust) / TXPOW_SCALE;
     pkt_tx.coderate   = CR_4_5;
     pkt_tx.invert_pol = true;
-    pkt_tx.no_crc     = true;
+    pkt_tx.no_crc     = !txjob->addcrc;
     pkt_tx.no_header  = false;
     pkt_tx.size = txjob->len;
     memcpy(pkt_tx.payload, &s2ctx->txq.txdata[txjob->off], pkt_tx.size);
@@ -260,8 +291,10 @@ static void rxpolling (tmr_t* tmr) {
                 if(rxjob->rssi < -p->rsig[j].rssi_chan || !p->rsig[j].is_valid) {
                     continue;
                 }
-                rxjob->rssi  = (u1_t)-p->rsig[j].rssi_chan;  
-                rxjob->snr = p->rsig[j].snr*8;
+                rxjob->fts = p->rsig[j].fine_received ? p->rsig[j].fine_tmst : -1;
+                rxjob->rssi = (u1_t)-p->rsig[j].rssi_chan;  
+                rxjob->snr = p->rsig[j].snr*4;
+                rxjob->rctx = j;
             }
             rps_t rps = ral_lgw2rps(p);
             rxjob->dr = s2e_rps2dr(&TC->s2ctx, rps);
@@ -276,7 +309,7 @@ static void rxpolling (tmr_t* tmr) {
     rt_setTimer(tmr, rt_micros_ahead(RX_POLL_INTV));
 }
 
-int ral_config (str_t hwspec, u4_t cca_region, char* json, int jsonlen) {
+int ral_config (str_t hwspec, u4_t cca_region, char* json, int jsonlen, chdefl_t* upchs) {
     struct sx1301v2conf sx1301v2conf;
     if( !sx1301v2conf_parse_setup(&sx1301v2conf, -1, hwspec, json, jsonlen) )
         return 0;
@@ -304,6 +337,7 @@ int ral_config (str_t hwspec, u4_t cca_region, char* json, int jsonlen) {
         rt_fatal("Radio device '%s' in use by process: %d%s", device, pids[0], n>1?".. (and others)":"");
 #endif // defined(CFG_linux)
 
+#if !defined(CFG_variant_testsim)
     int err;
     if( (err = spi_linuxdev_open(device, /*default speed*/-1, &spiFd)) != 0 ) {
         LOG(MOD_RAL|ERROR, "Failed to open SPI device '%s': ret=%d errno=%s", device, err, strerror(errno));
@@ -317,8 +351,10 @@ int ral_config (str_t hwspec, u4_t cca_region, char* json, int jsonlen) {
         LOG(MOD_RAL|ERROR, "Failed to set mode for SPI device '%s': %s", device, err);
         goto errexit;
     }
+#endif
 
     if( !sys_runRadioInit(sx1301v2conf.boards[0].device) ||
+        !sx1301v2conf_challoc(&sx1301v2conf, upchs) ||
         !sx1301v2conf_start(&sx1301v2conf, cca_region) ) {
         goto errexit;
     }
@@ -334,7 +370,9 @@ int ral_config (str_t hwspec, u4_t cca_region, char* json, int jsonlen) {
 
   errexit:
     if( spiFd >= 0 ) {
+#if !defined(CFG_variant_testsim)
         (void)spi_linuxdev_close(spiFd);
+#endif
         spiFd = -1;
     }
     return 0;

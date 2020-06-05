@@ -1,4 +1,4 @@
-# Basic Station
+# LoRa Basics™ Station
 
 [Basic Station](https://doc.sm.tc/station) is a LoRaWAN Gateway implementation, including features like
 
