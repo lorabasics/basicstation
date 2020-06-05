@@ -1,32 +1,33 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+
+#include "s2conf.h"
 #include "sys.h"
 #include "uj.h"
 #include "ws.h"
@@ -508,7 +509,7 @@ static void ws_closing_w (aio_t* aio) {
 static void ws_connected_w (aio_t* aio) {
     ws_t* conn = (ws_t*)aio->ctx;
     assert(conn->state == WS_CONNECTED);
-    LOG(MOD_AIO|XDEBUG, "[%d] ws_connected_w state=%d", conn->netctx.fd, conn->state);
+    // LOG(MOD_AIO|XDEBUG, "[%d] ws_connected_w state=%d", conn->netctx.fd, conn->state);
     int e;
   again:
     if( conn->wpos < conn->wend ) {
@@ -558,7 +559,7 @@ static void ws_connected_w (aio_t* aio) {
 static void ws_connected_r (aio_t* aio) {
     ws_t* conn = (ws_t*)aio->ctx;
     assert(conn->state >= WS_CONNECTED);  // also called during close
-    LOG(MOD_AIO|XDEBUG, "[%d] ws_connected_r state=%d", conn->netctx.fd, conn->state);
+    // LOG(MOD_AIO|XDEBUG, "[%d|WS] ws_connected_r state=%d", conn->netctx.fd, conn->state);
     int e;
   again:
     if( (e = readData(conn, WS_FRAME)) == IO_ERROR ) {
@@ -571,12 +572,34 @@ static void ws_connected_r (aio_t* aio) {
     u1_t* p = &conn->rbuf[conn->rbeg];
     u1_t opcode = p[-1];
     switch(opcode) {
-    case WSHDR_PING:
+    case WSHDR_PING: {
+        int plen = conn->rend-conn->rbeg;
+        LOG(MOD_AIO|XDEBUG, "[%d|WS] < PING (%H)", conn->netctx.fd, plen, p);
+        dbuf_t wbuf = ws_getSendbuf(conn, plen);
+        if( wbuf.buf == NULL ) {
+            LOG(MOD_AIO|WARNING, "[%d] Cannot respond to PING message of length %d", conn->netctx.fd, plen);
+            break;
+        }
+        wbuf.buf[0-WSHDR_INTRA] = plen>>8;
+        wbuf.buf[1-WSHDR_INTRA] = plen;
+        wbuf.buf[2-WSHDR_INTRA] = WSHDR_PONG;
+        conn->wfill += plen+WSHDR_INTRA;
+        memcpy(wbuf.buf, p, plen);
+        aio_set_wrfn(conn->aio, ws_connected_w);
+        LOG(MOD_AIO|XDEBUG, "[%d|WS] > PONG", conn->netctx.fd);
+        break;
+    }
     case WSHDR_PONG: {
-        LOG(MOD_AIO|WARNING, "[%d] Ignoring WS ping/pong message", conn->netctx.fd);
+        LOG(MOD_AIO|XDEBUG, "[%d|WS] Ignoring incoming WS PONG", conn->netctx.fd);
         break;
     }
     case WSHDR_TEXT: {
+        int offset = 0;
+        int plen = conn->rend - conn->rbeg;
+        while( offset < plen ) {
+            LOG(MOD_AIO|XDEBUG, "[%d|WS] %c %.*s", conn->netctx.fd, offset ? '.' : '<', min((LOGLINE_LEN-50),plen-offset), p+offset);
+            offset += (LOGLINE_LEN-50);
+        }
         conn->evcb(conn, WSEV_TEXTRCVD);
         if( conn->aio == NULL )
             return;
@@ -590,7 +613,7 @@ static void ws_connected_r (aio_t* aio) {
     }
     case WSHDR_CLOSE: {
         u2_t reason = rt_rmsbf2(p);
-        LOG(MOD_AIO|DEBUG, "[%d] Server sent close: reason=%d", conn->netctx.fd, reason);
+        LOG(MOD_AIO|DEBUG, "[%d|WS] Server sent close: reason=%d", conn->netctx.fd, reason);
         if( conn->state > WS_CONNECTED ) {
             ws_shutdown(conn);
             return;
@@ -600,7 +623,7 @@ static void ws_connected_r (aio_t* aio) {
         break;
     }
     default: {
-        LOG(MOD_AIO|WARNING, "[%d] Unsupported WS opcode: %d", conn->netctx.fd, opcode);
+        LOG(MOD_AIO|WARNING, "[%d|WS] Unsupported WS opcode: %d", conn->netctx.fd, opcode);
         break;
     }
     }
@@ -682,6 +705,13 @@ static void ws_handshaking (aio_t* aio) {
             aio_set_wrfn(conn->aio, ws_handshaking);
             return;
         }
+	if( err == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED ) {
+	    char errmsg[128] = {0};
+	    u4_t flags = mbedtls_ssl_get_verify_result(conn->tlsctx);
+	    mbedtls_x509_crt_verify_info(errmsg, sizeof(errmsg), "", flags);
+	    LOG(MOD_AIO|INFO, "TLS server certificate verification failed: %.*s", sizeof(errmsg), errmsg)
+	}
+
         ws_shutdown(conn);
         return;
     }
@@ -797,6 +827,13 @@ void ws_sendData (ws_t* conn, dbuf_t* b, int binaryData) {
 
 
 void ws_sendText (ws_t* conn, dbuf_t* b) {
+    int offset = 0;
+    int plen = b->pos;
+    while( offset < plen ) {
+        LOG(MOD_AIO|XDEBUG, "[%d|WS] %c %.*s", conn->netctx.fd, offset ? '.' : '>', min((LOGLINE_LEN-50),plen-offset), b->buf+offset);
+        offset += (LOGLINE_LEN-50);
+    }
+
     ws_sendData(conn, b, 0);
 }
 
@@ -845,6 +882,8 @@ void ws_free (ws_t* conn) {
     conn->host = NULL;
     conn->port = NULL;
     conn->uripath = NULL;
+    rt_free((void*)conn->authtoken);
+    conn->authtoken = NULL;
     rt_clrTimer(&conn->tmr);
     aio_close(conn->aio);
     conn->aio = NULL;
@@ -1397,12 +1436,12 @@ static int validateAuthToken (str_t s) {
             return 0;
         if( p[1] == 0 )
             return 1;
-        s = p+1;  // next line
+        s = p = p+1;  // next line
     }
 }
 
 
-int conn_setup_tls (conn_t* conn, int cred_cat, int cred_set) {
+int conn_setup_tls (conn_t* conn, int cred_cat, int cred_set, const char* servername) {
     tlsconf_t* tlsconf = tls_makeConf();
     str_t elems[SYS_CRED_NELEMS];
     int elemslen[SYS_CRED_NELEMS];
@@ -1444,7 +1483,7 @@ int conn_setup_tls (conn_t* conn, int cred_cat, int cred_set) {
     LOG(MOD_AIO|INFO, errmsg, sys_credcat2str(cred_cat), sys_credset2str(cred_set));
     assert(conn->tlsconf==NULL && conn->tlsctx==NULL);
     conn->tlsconf = tlsconf;
-    conn->tlsctx = tls_makeSession(tlsconf, NULL);
+    conn->tlsctx = tls_makeSession(tlsconf, servername);
     return 1;
  errexit:
     LOG(MOD_AIO|ERROR, errmsg, sys_credcat2str(cred_cat), sys_credset2str(cred_set));

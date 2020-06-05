@@ -1,30 +1,29 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #if defined(CFG_lgw1) && defined(CFG_ral_master_slave)
@@ -45,7 +44,7 @@
 #include "tc.h"
 #include "sys.h"
 #include "sys_linux.h"
-#include "sx1301conf.h"
+#include "sx130xconf.h"
 #include "ral.h"
 #include "ralsub.h"
 
@@ -66,6 +65,7 @@ typedef struct slave {
     u1_t       restartCnt;
     u1_t       antennaType;
     dbuf_t     sx1301confJson;
+    chdefl_t   upchs;
     int        last_expcmd;
     // Read Spill Buffer
     struct {
@@ -351,6 +351,7 @@ static void send_config (slave_t* slave) {
     if( jlen > 0 ) {
         req.region = region;
         req.jsonlen = jlen;
+        req.upchs = slave->upchs;
         memcpy(req.json, slave->sx1301confJson.buf, jlen);
         LOG(MOD_RAL|INFO, "Master sending %d bytes of JSON sx1301conf to slave (%d)", jlen, (int)(slave-slaves));
         if( !write_slave_pipe(slave, &req, sizeof(req)) )
@@ -422,11 +423,11 @@ static void restart_slave (tmr_t* tmr) {
 
 
 u1_t ral_altAntennas (u1_t txunit) {
-    if( txunit >= n_slaves || slaves[txunit].antennaType != SX1301_ANT_OMNI )
+    if( txunit >= n_slaves || slaves[txunit].antennaType != SX130X_ANT_OMNI )
         return 0;
     u1_t v = 0;
     for( int sidx=0; sidx < n_slaves; sidx++ ) {
-        if( sidx == txunit || slaves[sidx].antennaType != SX1301_ANT_OMNI )
+        if( sidx == txunit || slaves[sidx].antennaType != SX130X_ANT_OMNI )
             continue;
         v |= 1<<sidx;
     }
@@ -500,7 +501,32 @@ void ral_txabort (u1_t txunit) {
 }
 
 
-int ral_config (str_t hwspec, u4_t cca_region, char* json, int jsonlen) {
+static void slave_challoc_cb (void* ctx, challoc_t* ch, int flag) {
+    if( ctx == NULL ) return;
+    int n1301 = *(int*)ctx;
+    switch( flag ) {
+    case CHALLOC_START: {
+        break;
+    }
+    case CHALLOC_CHIP_START: {
+        break;
+    }
+    case CHALLOC_CH: {
+        if( ch->chip > n1301 ) break;
+        slaves[ch->chip].upchs.freq[ch->chan] = ch->chdef.freq;
+        slaves[ch->chip].upchs.rps[ch->chan] = ch->chdef.rps;
+        break;
+    }
+    case CHALLOC_CHIP_DONE: {
+        break;
+    }
+    case CHALLOC_DONE: {
+        break;
+    }
+    }
+}
+
+int ral_config (str_t hwspec, u4_t cca_region, char* json, int jsonlen, chdefl_t* upchs) {
     if( strncmp(hwspec, "sx1301/", 7) != 0 ) {
         LOG(MOD_RAL|ERROR, "Unsupported hwspec=%s", hwspec);
         return 0;
@@ -534,6 +560,9 @@ int ral_config (str_t hwspec, u4_t cca_region, char* json, int jsonlen) {
         LOG(MOD_RAL|ERROR, "sx1301_conf is empty but a hw setup IS required - no fallbacks");
         return 0;
     }
+
+    ral_challoc(upchs, slave_challoc_cb, &n1301);
+
     str_t s = hwspec+7;
     int specn = rt_readDec(&s);
     if( specn != n1301 ) {
@@ -541,7 +570,7 @@ int ral_config (str_t hwspec, u4_t cca_region, char* json, int jsonlen) {
         return 0;
     }
     if( n1301 > n_slaves ) {
-        LOG(MOD_RAL|ERROR, "Region plan asks for hwspec=%s which exceeds actual hardware: sx1301/%d", hwspec, n1301);
+        LOG(MOD_RAL|ERROR, "Region plan asks for hwspec=%s which exceeds actual hardware: sx1301/%d", hwspec, n_slaves);
         return 0;
     }
     if( n1301 < n_slaves ) {
@@ -549,8 +578,10 @@ int ral_config (str_t hwspec, u4_t cca_region, char* json, int jsonlen) {
             LOG(MOD_RAL|WARNING, "Region plan hwspec '%s' cannot be replicated onto routers 'sx1301/%d' - router is underutilized",
                 hwspec, n_slaves);
         } else {
-            for( int si=n1301, sj=0; si < n_slaves; si++, sj=(sj+1)%n1301 )
+            for( int si=n1301, sj=0; si < n_slaves; si++, sj=(sj+1)%n1301 ) {
+                slaves[si].upchs = slaves[sj].upchs;
                 slaves[si].sx1301confJson = dbuf_dup(slaves[sj].sx1301confJson);
+            }
             LOG(MOD_RAL|WARNING, "Region plan hwspec '%s' replicated %d times onto slaves 'sx1301/%d' - assuming antenna diversity",
                 hwspec, n_slaves/n1301, n_slaves);
         }
@@ -558,8 +589,9 @@ int ral_config (str_t hwspec, u4_t cca_region, char* json, int jsonlen) {
         LOG(MOD_RAL|INFO, "Region plan hwspec '%s' mapped to %d slaves 'sx1301/1'", hwspec, n_slaves);
     }
     region = cca_region;
-    for( int i=0; i < n_slaves; i++ )
+    for( int i=0; i < n_slaves; i++ ) {
         send_config(&slaves[i]);
+    }
     return 1;
 }
 
@@ -585,8 +617,8 @@ void ral_ini () {
     slaves = rt_mallocN(slave_t, n_slaves);
     int allok = 1;
     for( int sidx=0; sidx < n_slaves; sidx++ ) {
-        struct sx1301conf sx1301conf;
-        if( !sx1301conf_parse_setup(&sx1301conf, sidx, "sx1301/1", "{}", 2) ) {
+        struct sx130xconf sx1301conf;
+        if( !sx130xconf_parse_setup(&sx1301conf, sidx, "sx1301/1", "{}", 2) ) {
             allok = 0;
         } else {
             slaves[sidx].antennaType = sx1301conf.antennaType;

@@ -1,30 +1,29 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <stdlib.h>
@@ -34,6 +33,11 @@
 #include "timesync.h"
 #include "ral.h"
 
+#if defined(CFG_smtcpico)
+#define _MAX_DT 300
+#else
+#define _MAX_DT 100
+#endif
 
 #define SYNC_QUAL_GOOD        100  // values considered good
 #define SYNC_QUAL_THRES        90  // cut off quantile - for sync quality
@@ -45,14 +49,15 @@
 #define PPM       ((sL_t)1000000)  // 1sec in micros
 #define iPPM_SCALE             10  // keep drifts in deci ppm as ints
 #define fPPM_SCALE           10.0  //   -double-
-#define MIN_MCU_DRIFT_THRES     2*iPPM_SCALE   // deviation in deci ppm
-#define MAX_MCU_DRIFT_THRES   100*iPPM_SCALE   // deviation in deci ppm
+#define MIN_MCU_DRIFT_THRES         2*iPPM_SCALE   // deviation in deci ppm
+#define MAX_MCU_DRIFT_THRES   _MAX_DT*iPPM_SCALE   // deviation in deci ppm
 #define MAX_PPS_ERROR         1000  // deviation in micros
 #define MAX_PPS_OFFSET_CHANGE  50  // update if more than this
 #define NO_PPS_ALARM_INI       10  // seconds
 #define NO_PPS_ALARM_RATE     2.0  // growth rate alarm threshold
 #define NO_PPS_ALARM_MAX     3600  // seconds
 #define XTICKS_DECAY       100000  // max age of xticks from FIFO (us)
+#define UTC_GPS_EPOCH_US 315964800 // UTC epoch expressed in s since GPS epoch
 
 #define ustimeRoundSecs(x) (((x) + PPM/2) / PPM * PPM)
 #define ustime2xtime(sync, _ustime) ((sync)->xtime + ((_ustime)-(sync)->ustime))
@@ -100,12 +105,21 @@ static void timesyncReport (int force) {
     if( !force && now < lastReport + TIMESYNC_REPORTS )
         return;
     lastReport = now;
+    uL_t pps_ustime = xtime2ustime(&timesyncs[0], ppsSync.pps_xtime);
     LOG(MOD_SYN|INFO, "Time sync: ustime=0x%lX utc=0x%lX gpsOffset=0x%lX ppsOffset=%ld syncQual=%d\n",
-        now, rt_ustime2utc(now),  gpsOffset, ppsOffset, syncQual);
-    LOG(MOD_SYN|INFO, "Time sync: MCU/SX1301#0 ustime=0x%lX xtime=0x%lX pps_xtime=0x%lX",
+        now, rt_ustime2utc(now),  gpsOffset, ppsOffset, syncQual[0]);
+    LOG(MOD_SYN|INFO, "Time sync: MCU/SX130X#0 ustime=0x%lX xtime=0x%lX pps_xtime=0x%lX",
         timesyncs[0].ustime, timesyncs[0].xtime, timesyncs[0].pps_xtime);
-    LOG(MOD_SYN|INFO, "Time sync: Last PPS ustime=0x%lX xtime=0x%lX pps_xtime=0x%lX",
-        ppsSync.ustime, ppsSync.xtime, ppsSync.pps_xtime);
+    if( !ppsOffset )
+        return;
+    LOG(MOD_SYN|INFO, "Time sync: Last PPS     ustime=0x%lX xtime=0x%lX pps_ustime=0x%lX pps_xtime=0x%lX",
+        ppsSync.ustime, ppsSync.xtime, pps_ustime, ppsSync.pps_xtime);
+    if( !gpsOffset )
+        return;
+    LOG(MOD_SYN|INFO, "Time ref:  Last PPS     sys->UTC=%>.6T  SX130X->GPS=%>.6T  leaps=%02lus diff=%~T",
+        rt_ustime2utc(pps_ustime), ts_xtime2gpstime(ppsSync.pps_xtime) + UTC_GPS_EPOCH_US*PPM,
+        (ts_xtime2gpstime(ppsSync.pps_xtime) + UTC_GPS_EPOCH_US*PPM - rt_ustime2utc(pps_ustime) + PPM/2)/PPM,
+        (ts_xtime2gpstime(ppsSync.pps_xtime) + UTC_GPS_EPOCH_US*PPM - rt_ustime2utc(pps_ustime) + PPM/2)%PPM - PPM/2 );
 }
 
 
@@ -113,8 +127,12 @@ static int encodeDriftPPM (double drift) {
     return (int)round((drift - 1.0) * PPM * iPPM_SCALE);
 }
 
-static double decodeDriftPPM (double drift) {
-    return 1.0 + drift / (PPM * fPPM_SCALE);
+static double decodeDriftPPM (double scaled_ppm) {
+    return 1.0 + scaled_ppm / (PPM * fPPM_SCALE);
+}
+
+static double decodePPM (double scaled_ppm) {
+    return scaled_ppm / fPPM_SCALE;
 }
 
 static int cmp_abs_int (const void* a, const void* b) {
@@ -137,7 +155,7 @@ static int drift_stats (int* drifts, struct quants *q, int thresQ, int* auxQ) {
 static int log_drift_stats (str_t msg, int* drifts, int thresQ, int* auxQ) {
     struct quants q;
     int thres = drift_stats(drifts, &q, thresQ, auxQ);
-    LOG(MOD_SYN|INFO, "%s: min: %.1fppm  q50: %.1fppm  q80: %.1fppm  max: %.1fppm - threshold q%d: %.1fppm",
+    LOG(MOD_SYN|INFO, "%s: min: %+4.1fppm  q50: %+4.1fppm  q80: %+4.1fppm  max: %+4.1fppm - threshold q%d: %+4.1fppm",
         msg,
         q.qmin / fPPM_SCALE, q.q50 / fPPM_SCALE, q.q80 / fPPM_SCALE, q.qmax / fPPM_SCALE,
         thresQ, thres / fPPM_SCALE);
@@ -178,7 +196,7 @@ ustime_t ts_updateTimesync (u1_t txunit, int quality, const timesync_t* curr) {
     ustime_t dus = curr->ustime - last->ustime;
     sL_t dxc = curr->xtime - last->xtime;
     if( dxc <= 0 ) {
-        LOG(MOD_SYN|ERROR, "SX1301#%d trigger count not ticking or weird value: 0x%lX .. 0x%lX (dxc=%d)",
+        LOG(MOD_SYN|ERROR, "SX130X#%d trigger count not ticking or weird value: 0x%lX .. 0x%lX (dxc=%d)",
             txunit, last->xtime, curr->xtime, dxc);
         return TIMESYNC_RADIO_INTV;
     }
@@ -196,14 +214,19 @@ ustime_t ts_updateTimesync (u1_t txunit, int quality, const timesync_t* curr) {
         
         
         
-        int thres = log_drift_stats("MCU/SX1301 drift stats", stats->mcu_drifts, MCU_DRIFT_THRES, NULL);
+        int thres = log_drift_stats("MCU/SX130X drift stats", stats->mcu_drifts, MCU_DRIFT_THRES, NULL);
         stats->drift_thres = max(MIN_MCU_DRIFT_THRES, min(MAX_MCU_DRIFT_THRES, abs(thres)));
-        LOG(MOD_SYN|INFO, "Avg MCU drift vs SX1301#0: %.1fppm",  decodeDriftPPM((double)sum_mcu_drifts / N_DRIFTS));
+        double mean_ppm = decodePPM( ((double)sum_mcu_drifts) / N_DRIFTS);
+        LOG(MOD_SYN|INFO, "Mean MCU drift vs SX130X#0: %.1fppm",  mean_ppm);
+        if( rt_utcOffset_ts != 0 && !ppsSync.pps_xtime) {
+            rt_utcOffset -= (curr->ustime - rt_utcOffset_ts) * mean_ppm/PPM;
+            rt_utcOffset_ts = curr->ustime;
+        }
     }
     if( abs(drift_ppm) > stats->drift_thres ) {
         stats->excessive_drift_cnt += 1;
         if( (stats->excessive_drift_cnt % QUICK_RETRIES) == 0 ) {
-            LOG(MOD_SYN|ERROR, "Repeated excessive clock drifts between MCU/SX1301#%d (%d retries): %.1fppm (threshold %.1fppm)",
+            LOG(MOD_SYN|ERROR, "Repeated excessive clock drifts between MCU/SX130X#%d (%d retries): %.1fppm (threshold %.1fppm)",
                 txunit, stats->excessive_drift_cnt, drift_ppm/fPPM_SCALE, stats->drift_thres/fPPM_SCALE);
         }
         if( stats->excessive_drift_cnt >= 2*QUICK_RETRIES )
@@ -228,7 +251,7 @@ ustime_t ts_updateTimesync (u1_t txunit, int quality, const timesync_t* curr) {
         }
     }
     // We update ppsSync only if we have two consecutive time syncs with valid PPS timestamps
-    // and if they are apart ~1s - we might be weird values if no PPS pulse occured during time sync span.
+    // and if they are apart ~1s - we might be weird values if no PPS pulse occurred during time sync span.
     if( !last->pps_xtime || !curr->pps_xtime )
         goto done;
     if( curr->xtime - curr->pps_xtime > PPM+TX_MIN_GAP )
@@ -247,7 +270,7 @@ ustime_t ts_updateTimesync (u1_t txunit, int quality, const timesync_t* curr) {
     pps_drifts[pps_drifts_widx] = encodeDriftPPM(pps_drift);
     pps_drifts_widx = (pps_drifts_widx + 1) % N_DRIFTS;
     if( pps_drifts_widx == 0 )
-        pps_drifts_thres = log_drift_stats("PPS/SX1301 drift stats", pps_drifts, PPS_DRIFT_THRES, NULL);
+        pps_drifts_thres = log_drift_stats("PPS/SX130X drift stats", pps_drifts, PPS_DRIFT_THRES, NULL);
 
     ustime_t pps_ustime = xtime2ustime(curr, curr->pps_xtime);
     ustime_t off = pps_ustime % PPM;
@@ -260,10 +283,13 @@ ustime_t ts_updateTimesync (u1_t txunit, int quality, const timesync_t* curr) {
     }
     else if( abs(ppsOffset-off) > (stats->drift_thres * TIMESYNC_RADIO_INTV)/PPM  ) {
         LOG(MOD_SYN|INFO, "Changed PPS offset: %ld => %ld (delta: %ld)", ppsOffset, off, off-ppsOffset);
+        // Adjust ppsOffset to accout for MCU/PPS drift
         ppsOffset = off;
     }
+    // Correct the fractional second of the UTC reference by ppsOffset (expects s-precision UTC time reference)
+    rt_utcOffset = rt_utcOffset - rt_utcOffset%PPM + (PPM-ppsOffset);
     // Shift timesync into the middle of two PPS pulses
-    // Avoid turning off PPS latching during SX1301 sync procedure near the PPS.
+    // Avoid turning off PPS latching during SX130X sync procedure near the PPS.
     // We might miss a PPS pulse and a scheduled frame might not be sent.
     // Also wobble the sync time a bir otherwise we might track the value when enabling PPS latching
     // as PPS. This happens with a rate resembling 1Hz
@@ -284,7 +310,7 @@ ustime_t ts_updateTimesync (u1_t txunit, int quality, const timesync_t* curr) {
 sL_t ts_gpstime2xtime (u1_t txunit, sL_t gpstime) {
     if( txunit >= MAX_TXUNITS || !timesyncs[txunit].xtime || !ppsSync.pps_xtime || ppsOffset < 0 || !gpsOffset ) {
         LOG(MOD_SYN|ERROR, "Cannot convert GPS time - missing %s time sync",
-            !timesyncs[txunit].xtime ? "SX1301"
+            !timesyncs[txunit].xtime ? "SX130X"
             : !ppsSync.pps_xtime || ppsOffset ? "PPS"
             : !gpsOffset ? "GPS" : "?");
         return 0;
@@ -325,7 +351,7 @@ sL_t ts_ustime2xtime (u1_t txunit, ustime_t ustime) {
 ustime_t ts_xtime2ustime (sL_t xtime) {
     int txunit = ral_xtime2txunit(xtime);
     if( txunit >= MAX_TXUNITS || timesyncs[txunit].xtime == 0 ) {
-        LOG(MOD_SYN|ERROR, "Cannot convert xtime=0x%lX - missing SX1301#%d time sync",
+        LOG(MOD_SYN|ERROR, "Cannot convert xtime=0x%lX - missing SX130X#%d time sync",
             timesyncs[txunit].xtime, txunit);
         return 0;
     }
@@ -355,18 +381,18 @@ sL_t ts_xtime2xtime (sL_t xtime, u1_t dst_txunit) {
 }
 
 
-// Convert a 32bit SX1301 tick counter into a xtime reported back to the LNS
+// Convert a 32bit SX130X tick counter into a xtime reported back to the LNS
 // This can only be called in a process with access to libloragw (aka not ral_master)
 sL_t ts_xticks2xtime (u4_t xticks, sL_t last_xtime) {
     // Time sync should be frequent so that we should never see a roll over
     // from positive to negative (takes 2^31us ~ 35min)
     // However, we might see small negative numbers because time sync might
-    // be slightly younger than time stamps of frames being stuck in the SX1301 fifo.
+    // be slightly younger than time stamps of frames being stuck in the SX130X fifo.
     //
     sL_t d;
     if( (d = (s4_t)(xticks - last_xtime)) < -XTICKS_DECAY ) {
         LOG(MOD_SYN|CRITICAL,
-            "SX1301 RX time roll over - no update for a long time: xticks=0x%X last_xtime=0x%lX",
+            "SX130X RX time roll over - no update for a long time: xticks=0x%X last_xtime=0x%lX",
             xticks, last_xtime);
         return 0;
     }
@@ -375,8 +401,8 @@ sL_t ts_xticks2xtime (u4_t xticks, sL_t last_xtime) {
 
 
 sL_t ts_newXtimeSession (u1_t txunit) {
-    // This disambiguates SX1301 timestamps
-    // If we have a new session (currently reconnect to TC) the SX1301 counter restarts
+    // This disambiguates SX130X timestamps
+    // If we have a new session (currently reconnect to TC) the SX130X counter restarts
     // Old timestamps coming in from TC with timestamps before the restart must be rejetced.
     sL_t ext = ((sL_t)rand() & RAL_XTSESS_MASK) << RAL_XTSESS_SHIFT;
     if( !ext ) ext = (sL_t)1<<RAL_XTSESS_SHIFT;          // session is never 0
@@ -399,6 +425,7 @@ void ts_iniTimesync () {
     syncQual_thres = INT_MAX;
     syncLnsCnt = 0;
     lastReport = 0;
+    sum_mcu_drifts = 0;
     memset(timesyncs, 0, sizeof(timesyncs));
     rt_clrTimer(&syncLnsTmr);
 }
@@ -416,7 +443,7 @@ void ts_iniTimesync () {
 static void onTimesyncLns (tmr_t* tmr) {
     timesyncReport(0);
     if( TC == NULL || ppsOffset < 0 || gpsOffset ) {
-        // not connected || no SX1301/PPS sync yet || we have a sync to GPS epoch
+        // not connected || no SX130X/PPS sync yet || we have a sync to GPS epoch
         rt_setTimer(tmr, rt_micros_ahead(TIMESYNC_LNS_PAUSE));
         return;
     }
@@ -460,7 +487,7 @@ void ts_setTimesyncLns (ustime_t xtime, sL_t gpstime) {
 }
 
 
-// Server reported back a timestamp - infer GPS second label for a specific PPS puls
+// Server reported back a timestamp - infer GPS second label for a specific PPS edge
 void ts_processTimesyncLns (ustime_t txtime, ustime_t rxtime, sL_t gpstime) {
     if( ppsOffset < 0 || rxtime - txtime >= 2*PPM || gpsOffset )
         return;    // need ppsOffset || roundtrip too long || we already have a solution
@@ -511,7 +538,6 @@ void ts_processTimesyncLns (ustime_t txtime, ustime_t rxtime, sL_t gpstime) {
     gpsOffset = gps_s - delta;
     LOG(MOD_SYN|INFO, "Timesync with LNS: gpsOffset=0x%lX", gpsOffset);
     timesyncReport(1);
-
 }
 
 // --------------------------------------------------------------------------------

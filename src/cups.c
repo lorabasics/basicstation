@@ -1,30 +1,29 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "s2conf.h"
@@ -41,6 +40,7 @@
 
 
 #define FAIL_CNT_THRES 6
+#define SIGCRC_LEN 4
 
 static tmr_t   cups_sync_tmr;
 static cups_t* CUPS;
@@ -137,6 +137,7 @@ static void cups_ondone (tmr_t* tmr) {
                     run_update = 1;
                 } else {
                     LOG(MOD_CUP|ERROR, "Keyfile present, but no signature provided. Aborting update.");
+                    sys_sigKey(-1);
                 }
             }
             if (run_update) {
@@ -215,6 +216,7 @@ static void cups_update_info (conn_t* _conn, int ev) {
         xprintf(&b,
                 "POST /update-info HTTP/1.1\r\n"
                 "Host: %*s\r\n"
+                "Content-Type: application/json\r\n"
                 "Content-Length: 00000\r\n"
                 "%s\r\n",
                 cui.hostportEnd-cui.hostportBeg, cupsuri.buf+cui.hostportBeg,
@@ -226,8 +228,8 @@ static void cups_update_info (conn_t* _conn, int ev) {
                   "router",     '6', sys_eui(),
                   "cupsUri",    's', sys_uri(SYS_CRED_CUPS, SYS_CRED_REG),
                   "tcUri",      's', sys_uri(SYS_CRED_TC, SYS_CRED_REG),
-                  "cupsCredCrc",'u', sys_crcCred(SYS_CRED_CUPS),
-                  "tcCredCrc",  'u', sys_crcCred(SYS_CRED_TC),
+                  "cupsCredCrc",'u', sys_crcCred(SYS_CRED_CUPS, SYS_CRED_REG),
+                  "tcCredCrc",  'u', sys_crcCred(SYS_CRED_TC, SYS_CRED_REG),
                   "station",    's', CFG_version " " CFG_bdate,
                   "model",      's', CFG_platform,
                   "package",    's', version,
@@ -301,8 +303,9 @@ static void cups_update_info (conn_t* _conn, int ev) {
                 // Not enough data in body buffer
               get_more:
                 if( !http_getMore(&cups->hc) ) {
+                    LOG(MOD_CUP|ERROR, "Unexpected end of data");
                   proto_err:
-                    LOG(MOD_CUP|ERROR, "Protocol error - unexpected end of data");
+                    LOG(MOD_CUP|ERROR, "CUPS Protocol error. Closing connection.");
                     cups_done(cups, CUPS_ERR_FAILED);
                 }
                 return; // waiting for next chunk
@@ -319,6 +322,10 @@ static void cups_update_info (conn_t* _conn, int ev) {
                     cups->temp_n = 0;
                     continue;
                 }
+                if( segm_len < 0 ) {
+                    LOG(MOD_CUP|ERROR, "Segment %d length not allowed (must be <2GB): 0x%08x bytes", cstate-CUPS_FEED_CUPS_URI, segm_len);
+                    goto proto_err;
+                }
                 cups->segm_off = 0;
                 cups->segm_len = segm_len;
                 cups->temp_n = 4;
@@ -326,15 +333,19 @@ static void cups_update_info (conn_t* _conn, int ev) {
                 if( cstate == CUPS_FEED_CUPS_CRED ) {
                     sys_credStart(SYS_CRED_CUPS, segm_len);
                     cups->uflags |= UPDATE_FLAG(CUPS_CRED);
-                    LOG(MOD_CUP|INFO, "CUPS credentials segment (%d bytes)", segm_len);
+                    LOG(MOD_CUP|INFO, "CUPS Credentials segment (%d bytes)", segm_len);
                 }
                 else if( cstate == CUPS_FEED_TC_CRED ) {
                     sys_credStart(SYS_CRED_TC, segm_len);
                     cups->uflags |= UPDATE_FLAG(TC_CRED);
-                    LOG(MOD_CUP|INFO, "TC credentials segment (%d bytes)", segm_len);
+                    LOG(MOD_CUP|INFO, "TC Credentials segment (%d bytes)", segm_len);
                 } else if( cstate == CUPS_FEED_SIGNATURE ) {
                     LOG(MOD_CUP|INFO, "Signature segment (%d bytes)", segm_len);
                     rt_free(cups->sig);
+                    if( segm_len < 8 || segm_len > sizeof(cups->sig->signature) + SIGCRC_LEN ) {
+                        LOG(MOD_CUP|ERROR, "Illegal signature segment length (must be 8-%d bytes): %d", sizeof(cups->sig->signature) + SIGCRC_LEN, segm_len);
+                        goto proto_err;
+                    }
                     cups->sig = rt_malloc(cups_sig_t);
                 } else { // cstate == CUPS_FEED_UPDATE
                     assert(cstate == CUPS_FEED_UPDATE);
@@ -355,16 +366,10 @@ static void cups_update_info (conn_t* _conn, int ev) {
                 sys_credComplete(SYS_CRED_TC, cups->segm_len);
                 LOG(MOD_CUP|INFO, "TC credentials updated (%d bytes)", cups->segm_len);
             } else if( cstate == CUPS_FEED_SIGNATURE ) {
-                if ( cups->segm_len - 4 > sizeof(cups->sig->signature) ) {
-                    LOG(MOD_CUP|ERROR, "CUPS provided oversized signature %d bytes (%d allowed).",
-                        cups->segm_len - 4, sizeof(cups->sig->signature));
-                    rt_free(cups->sig);
-                } else {
-                    cups->uflags |= UPDATE_FLAG(SIGNATURE);
-                    cups->sig->len = cups->segm_len - 4;
-                    mbedtls_sha512_init(&cups->sig->sha);
-                    mbedtls_sha512_starts(&cups->sig->sha, 0);
-                }
+                cups->uflags |= UPDATE_FLAG(SIGNATURE);
+                cups->sig->len = cups->segm_len - SIGCRC_LEN;
+                mbedtls_sha512_init(&cups->sig->sha);
+                mbedtls_sha512_starts(&cups->sig->sha, 0);
             }
             else { // cstate == CUPS_FEED_UPDATE
                 if( sys_updateCommit(cups->segm_len) ) {
@@ -391,15 +396,15 @@ static void cups_update_info (conn_t* _conn, int ev) {
         else if( cstate == CUPS_FEED_SIGNATURE ) {
             // CRC of signature comes just after length
             int siglen = dlen;
-            if( segm_off < 4 ) { // CRC before signature
-                int d = min(4-segm_off, siglen);
+            if( segm_off < SIGCRC_LEN ) { // CRC before signature
+                int d = min(SIGCRC_LEN-segm_off, siglen);
                 memcpy(cups->sig->keycrcb + segm_off, data, d);
                 segm_off += d;
                 data     += d;
                 siglen   -= d;
             }
-            if (siglen > 0 && segm_off + siglen - 4 <= sizeof(cups->sig->signature)) {
-                memcpy(cups->sig->signature+segm_off-4, data, siglen);
+            if (siglen > 0 && segm_off + siglen - SIGCRC_LEN <= sizeof(cups->sig->signature)) {
+                memcpy(cups->sig->signature+segm_off-SIGCRC_LEN, data, siglen);
             }
         } else {
             assert(cstate == CUPS_FEED_UPDATE);
@@ -467,7 +472,7 @@ void cups_start (cups_t* cups) {
         LOG(MOD_CUP|ERROR,"Bad CUPS URI: %s", cupsuri);
         goto errexit;
     }
-    if( ok == URI_TLS && !conn_setup_tls(&cups->hc.c, SYS_CRED_CUPS, cups_credset) ) {
+    if( ok == URI_TLS && !conn_setup_tls(&cups->hc.c, SYS_CRED_CUPS, cups_credset, hostname) ) {
         goto errexit;
     }
     if( !http_connect(&cups->hc, hostname, port) ) {
@@ -498,9 +503,13 @@ void sys_triggerCUPS (int delay) {
         sys_stopTC();
     }
 #endif // defined(CFG_cups_exclusive)
+    if( delay < 0 ) {
+        delay = CUPS_RESYNC_INTV/1000000;
+    }
     LOG(MOD_CUP|INFO, "Starting a CUPS session in %d seconds.", delay);
     sys_inState(SYSIS_CUPS_INTERACT);
     CUPS = cups_ini();
+    rt_clrTimer(&cups_sync_tmr);
     rt_setTimerCb(&CUPS->timeout, rt_seconds_ahead(delay), delayedCUPSstart);
 }
 

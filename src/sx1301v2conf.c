@@ -1,30 +1,29 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #if defined(CFG_lgw2)
@@ -35,7 +34,7 @@
 #include "sys.h"
 #include "sx1301v2conf.h"
 #include "lgw2/sx1301ar_err.h"
-
+#include "lgw2/sx1301ar_reg.h"
 
 // Describes radio config for HW spec sx1301/n as sent by LNS
 struct lns_sx1301_conf {
@@ -146,7 +145,7 @@ static int parse_bandwidth (ujdec_t* D) {
     case 250000: return BW_250K; break;
     case 125000: return BW_125K; break;
     default:
-        uj_error(D, "Illegal bandwidth value: %ld (must be 125000, 250000, or 500000)");
+        uj_error(D, "Illegal bandwidth value: %ld (must be 125000, 250000, or 500000)", bw);
         return BW_UNDEFINED; // NOT REACHED
     }
 }
@@ -303,6 +302,11 @@ static void parse_radio_conf (ujdec_t* D, struct sx1301v2conf* sx1301v2conf) {
                 boardconf->dsp_stat_interval = uj_intRange(D,0,255);
                 break;
             }
+            case J_fpga_flavor: {
+                uj_str(D);
+                sx1301v2conf->boards[boardidx].fpga_flavor = D->str.crc;
+                break;
+            }
             case J_aes_key: {
                 int n = uj_hexstr(D, boardconf->aes_key, sizeof(boardconf->aes_key));
                 if( n != 16 )
@@ -438,7 +442,7 @@ static int setup_LBT (struct sx1301v2conf* sx1301v2conf, u4_t cca_region) {
 
 
 static int parse_sx1301_lns_conf (ujdec_t* D, struct lns_sx1301_conf* confs) {
-    int sx1301idx, sx1301num;
+    int sx1301idx = 0, sx1301num = 0;
     uj_enterArray(D);
     while( (sx1301idx = uj_nextSlot(D)) >= 0 ) {
         sx1301num = sx1301idx+1;
@@ -624,6 +628,15 @@ int sx1301v2conf_parse_setup (struct sx1301v2conf* sx1301v2conf, int slaveIdx,
         c->chipConf.freq_hz = (maxFreq+minFreq)/2;
     }
 
+    // if(
+    //     lns_sx1301_num == 2 &&
+    //     sx1301v2conf->sx1301[1].chipConf.freq_hz == sx1301v2conf->sx1301[0].chipConf.freq_hz &&
+    //     sx1301v2conf->boards[0].boardConf.rf_chain[1].rx_enable &&
+    //     sx1301v2conf->boards[0].boardConf.rf_chain[0].rx_enable
+    // ) {
+    //     sx1301v2conf->sx1301[1].chipConf.rf_chain = 1;
+    // }
+
     
 
     return 1;
@@ -632,29 +645,113 @@ int sx1301v2conf_parse_setup (struct sx1301v2conf* sx1301v2conf, int slaveIdx,
 
 static void dump_boardConf (int bid, sx1301ar_board_cfg_t* c) {
     LOG(MOD_RAL|VERBOSE,
-        "BRD#%d: rx_freq_hz=%d rx_bw_hz=%d",
+        "__ BRD#%d : %^8F bw=%F %s",
         bid,
         c->rx_freq_hz,
-        c->rx_bw_hz);
+        c->rx_bw_hz,
+        c->board_type == BRD_MASTER ? "MASTER" : "SLAVE_");
+    if( c->board_type == BRD_MASTER ) {
+        for( int r = 0; r < SX1301AR_BOARD_RFCHAIN_NB; r++ ) {
+            sx1301ar_rfchain_t* rfc = &c->rf_chain[r];
+            LOG(MOD_RAL|VERBOSE, "   rf  %d : %s%s%s", r,
+                rfc->rx_enable ? "RX " : "",
+                rfc->tx_enable ? "TX"  : "",
+                !rfc->rx_enable && !rfc->tx_enable ? "disabled" : ""
+            );
+        }
+    }
 }
 
 static void dump_chipConf (int chipid, sx1301ar_chip_cfg_t* c) {
+    if( !c->enable ) {
+        LOG(MOD_RAL|VERBOSE, "SX1301#%d : disabled", chipid);
+        return;
+    }
     LOG(MOD_RAL|VERBOSE,
-        "SX1301#%d: enable=%d rf_chain=%d freq=%d",
+        "SX1301#%d : %^8F rf_chain=%d",
         chipid,
-        c->enable,
-        c->rf_chain,
-        c->freq_hz);
+        c->freq_hz,
+        c->rf_chain);
 }
 
 static void dump_chanConf (int chipid, int chanid, sx1301ar_chan_cfg_t* c) {
+    if( ! c->enable ) {
+        LOG(MOD_RAL|VERBOSE, "  ch %d,%d : disabled", chipid, chanid);
+        return;
+    }
+    if( chanid == SX1301AR_CHIP_FSK_IDX ) {
+        LOG(MOD_RAL|VERBOSE,
+            "  ch %d,%d : %^8F FSK %d baud",
+            chipid,
+            chanid,
+            c->freq_hz,
+            c->modrate);
+        return;
+    }
     LOG(MOD_RAL|VERBOSE,
-        "SX1301#%d chan %2d: enable=%d freq=%d bandwidth=%d modrate=%d",
-        chipid, chanid,
-        c->enable,
+        "  ch %d,%d : %^8F bw=%^5~F SF%d-%d",
+        chipid,
+        chanid,
         c->freq_hz,
-        c->bandwidth,
-        c->modrate);
+        sx1301ar_bw_enum2nb(c->bandwidth),
+        sx1301ar_sf_min_enum2nb(c->modrate),
+        sx1301ar_sf_max_enum2nb(c->modrate));
+}
+
+
+static void sx1301v2conf_challoc_cb (void* ctx, challoc_t* ch, int flag) {
+    if( ctx == NULL ) return;
+    struct sx1301v2conf* sx1301v2conf = (struct sx1301v2conf*)ctx;
+
+    switch( flag ) {
+    case CHALLOC_START: {
+        break;
+    }
+    case CHALLOC_CHIP_START: {
+        break;
+    }
+    case CHALLOC_CH: {
+        sx1301ar_chan_cfg_t* chanc = &sx1301v2conf->sx1301[ch->chip].chanConfs[ch->chan];
+        chanc->enable = 1;
+        chanc->freq_hz = ch->chdef.freq;
+
+        if( ch->chan == SX1301AR_CHIP_FSK_IDX ) {
+            chanc->modrate = MR_56000;
+            chanc->bandwidth = BW_UNDEFINED;
+        }
+        else if( ch->chan == SX1301AR_CHIP_LSA_IDX ) {
+            chanc->modrate   = ral_rps2sf(rps_make(ch->chdef.rps.maxSF, ch->chdef.rps.bw));
+            chanc->bandwidth = ral_rps2bw(rps_make(ch->chdef.rps.maxSF, ch->chdef.rps.bw));
+        }
+        else {
+            chanc->modrate = sx1301ar_sf_range_nb2enum(
+                sx1301ar_sf_enum2nb(ral_rps2sf(rps_make(ch->chdef.rps.minSF, ch->chdef.rps.bw))),
+                sx1301ar_sf_enum2nb(ral_rps2sf(rps_make(ch->chdef.rps.maxSF, ch->chdef.rps.bw))));
+            chanc->bandwidth = BW_125K;
+        }
+
+        break;
+    }
+    case CHALLOC_CHIP_DONE: {
+        if( !ch->chans ) break;
+        sx1301v2conf->sx1301[ch->chipid].chipConf.enable = 1;
+        sx1301v2conf->sx1301[ch->chipid].chipConf.rf_chain = 0; 
+        sx1301v2conf->sx1301[ch->chipid].chipConf.freq_hz = (ch->maxFreq+ch->minFreq)/2;
+        break;
+    }
+    case CHALLOC_DONE: {
+        if( sx1301v2conf->boards[0].boardConf.rf_chain[1].rx_enable &&
+            !sx1301v2conf->sx1301[1].chipConf.enable ) {
+            memcpy(&sx1301v2conf->sx1301[1], &sx1301v2conf->sx1301[0], sizeof(struct chip_conf));
+            sx1301v2conf->sx1301[1].chipConf.rf_chain = 1;
+        }
+        break;
+    }
+    }
+}
+
+int sx1301v2conf_challoc (struct sx1301v2conf* sx1301v2conf, chdefl_t* upchs) {
+    return ral_challoc(upchs, sx1301v2conf_challoc_cb, sx1301v2conf);
 }
 
 
@@ -680,9 +777,9 @@ int sx1301v2conf_start (struct sx1301v2conf* sx1301v2conf, u4_t cca_region) {
                 return 0;
             }
             for( int chanidx=0; chanidx < SX1301AR_CHIP_CHAN_NB; chanidx++ ) {
+                dump_chanConf(chipidx, chanidx, &cc->chanConfs[chanidx]);
                 if( !cc->chanConfs[chanidx].enable )
                     continue;
-                dump_chanConf(chipidx, chanidx, &cc->chanConfs[chanidx]);
                 if( sx1301ar_conf_chan(boardidx, (chipidx << 4) | chanidx, &cc->chanConfs[chanidx]) != 0 ) {
                     LOG(MOD_RAL|ERROR, "sx1301ar_conf_chan(%d,%d,%d,..) failed: %s",
                         boardidx, chipidx, chanidx, sx1301ar_err_message(sx1301ar_errno));
@@ -702,5 +799,6 @@ int sx1301v2conf_start (struct sx1301v2conf* sx1301v2conf, u4_t cca_region) {
  fail:
     return 0;
 }
+
 
 #endif // defined(CFG_lgw2)
