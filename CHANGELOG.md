@@ -1,7 +1,18 @@
 # Changelog
 
-## 2.0.4 - 2020-03-17
+## 2.0.5 - 2020-06-05
+* README.md - Updated with supported platform and Travis Banner
+* Remove LICENSE & ROADMAP.md file
+* Based on v2.0.4 with no source code/functional changes
 
+## 2.0.4 - 2020-03-17
+* cups - Add Content-Type header to CUPS request
+* sys_linux - truncate update file instead of append
+* cups - nullify sig pointer after free
+* cups - symbol for signature crc length
+* cups - Add segment length checks
+* sys_linux - cups update abort should unlink the right file
+* cups - free the key buffer
 * lgw1302: Added sx1302 hal and integrated with corecell platform
 * sys_linux: Fixed decoder pointer dereferencing (#39)
 * s2e: Fixed memory corruption bug in JoinEui filter parsing (#31)
