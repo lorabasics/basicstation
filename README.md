@@ -73,6 +73,13 @@ RADIODEV=/dev/spidev0.0 ../../build-rpi-std/bin/station
 The example configuration connects to a public test server [s2.sm.tc](wss://s2.sm.tc) through which Station fetches all required credentials and a channel plan matching the region as determined from the IP address of the gateway. Provided there are active LoRa devices in proximity, received LoRa frames are printed in the log output on `stderr`.
 
 ## Instruction for Supported Platfroms
+#### balena (Raspberry Pi 3/4 or balenaFin + RAK2245 or RAK831)
+
+Running this project is as simple as deploying it to a balenaCloud application. You can do it in just one click by using the button below:
+
+[![](https://www.balena.io/deploy.png)](https://dashboard.balena-cloud.com/deploy?repoUrl=https://github.com/balena-io-playground/basicstation)
+
+Follow instructions, click Add a Device and flash an SD card with that OS image dowloaded from balenaCloud. Enjoy the magic 🌟Over-The-Air🌟!
 
 #### Corecell Platform (Raspberry Pi as HOST + [SX1302CxxxxGW Concentrator](https://www.semtech.com/products/wireless-rf/lora-gateways/sx1302cxxxgw1))
 
@@ -164,3 +171,9 @@ Usage: station [OPTION...]
 Mandatory or optional arguments to long options are also mandatory or optional
 for any corresponding short options.
 ```
+
+
+
+
+
+

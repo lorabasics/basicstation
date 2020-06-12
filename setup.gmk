@@ -35,18 +35,20 @@ NQ = $(if ${V},>/dev/null,)
 
 platform ?= linux
 variant  ?= std
+arch     ?= default
 
 -include ${TD}/setup-${platform}.gmk
 
 LOCAL_ARCH := $(shell gcc -dumpmachine)
 
-ARCH.linux   = x86_64-linux-gnu
-ARCH.linuxV2 = x86_64-linux-gnu
-ARCH.linuxpico = x86_64-linux-gnu
-ARCH.corecell  = arm-linux-gnueabihf
-ARCH.rpi     = arm-linux-gnueabihf
-ARCH.kerlink = arm-klk-linux-gnueabi
-ARCH=${ARCH.${platform}}
+ARCH.linux.default   = x86_64-linux-gnu
+ARCH.linuxV2.default = x86_64-linux-gnu
+ARCH.linuxpico.default = x86_64-linux-gnu
+ARCH.corecell.default  = arm-linux-gnueabihf
+ARCH.rpi.armv7hf  = arm-linux-gnueabihf
+ARCH.rpi.aarch64  = aarch64-linux-gnu
+ARCH.kerlink.default = arm-klk-linux-gnueabi
+ARCH=${ARCH.${platform}.${arch}}
 
 export TDfull := $(shell cd ${TD} && pwd)
 TOOLCHAIN=${HOME}/toolchain-${platform}
