@@ -1,30 +1,29 @@
 /*
- *  --- Revised 3-Clause BSD License ---
- *  Copyright (C) 2016-2019, SEMTECH (International) AG.
- *  All rights reserved.
+ * --- Revised 3-Clause BSD License ---
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
  *
- *      * Redistributions of source code must retain the above copyright notice,
- *        this list of conditions and the following disclaimer.
- *      * Redistributions in binary form must reproduce the above copyright notice,
- *        this list of conditions and the following disclaimer in the documentation
- *        and/or other materials provided with the distribution.
- *      * Neither the name of the copyright holder nor the names of its contributors
- *        may be used to endorse or promote products derived from this software
- *        without specific prior written permission.
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the names of its
+ *       contributors may be used to endorse or promote products derived from this
+ *       software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- *  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- *  DISCLAIMED. IN NO EVENT SHALL SEMTECH BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- *  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- *  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION. BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef _s2e_h_
@@ -38,7 +37,8 @@
 
 extern uL_t* s2e_joineuiFilter;
 extern u4_t  s2e_netidFilter[4];
-int s2e_parse_lora_frame(ujbuf_t* buf, const u1_t* frame , int len, dbuf_t* lbuf);
+int  s2e_parse_lora_frame(ujbuf_t* buf, const u1_t* frame , int len, dbuf_t* lbuf);
+void s2e_make_beacon (uint8_t* layout, sL_t epoch_secs, int infodesc, double lat, double lon, uint8_t* buf);
 
 
 enum { SF12, SF11, SF10, SF9, SF8, SF7, FSK, SFNIL };
@@ -77,14 +77,16 @@ enum {
     TXCOND_NODC,      // definitely no DC
 };
 
-enum { PRIO_PENALTY_ALTTXTIME  = 10 };
-enum { PRIO_PENALTY_ALTANTENNA = 10 };
-enum { PRIO_PENALTY_CCA        =  8 };
+enum { PRIO_PENALTY_ALTTXTIME  =  10 };
+enum { PRIO_PENALTY_ALTANTENNA =  10 };
+enum { PRIO_PENALTY_CCA        =   8 };
+enum { PRIO_BEACON             = 128 };
 
 
 
 enum { DC_DECI, DC_CENTI, DC_MILLI, DC_NUM_BANDS };
 enum { MAX_DNCHNLS = 48 };
+enum { MAX_UPCHNLS = MAX_130X * 10 };  // 10 channels per chip
 enum { DR_CNT = 16 };
 enum { DR_ILLEGAL = 16 };
 
@@ -94,6 +96,12 @@ typedef struct s2txunit {
     txidx_t  head;
     tmr_t    timer;
 } s2txunit_t;
+
+typedef struct s2bcn {
+    u1_t     ctrl;      // 0x0F => DR, 0xF0 = n frequencies
+    u1_t     layout[3]; // time_off, infodesc_off, bcn_len
+    u4_t     freqs[8];  // 1 or up to 8 frequencies
+} s2bcn_t;
 
 typedef struct s2ctx {
     dbuf_t (*getSendbuf) (struct s2ctx* s2ctx, int minsize);     // wired to TC/websocket
@@ -117,6 +125,8 @@ typedef struct s2ctx {
     double   muxtime;    // time stamp from muxs
     ustime_t reftime;    // local time at arrival of muxtime
     s2txunit_t txunits[MAX_TXUNITS];
+    s2bcn_t    bcn;      // beacon definition
+    tmr_t      bcntimer;
 
 } s2ctx_t;
 
@@ -131,7 +141,7 @@ extern u1_t s2e_dwellDisabled; // ignore dwell time limits - override for test/d
 rps_t    s2e_dr2rps (s2ctx_t*, u1_t dr);
 u1_t     s2e_rps2dr (s2ctx_t*, rps_t rps);
 ustime_t s2e_calcUpAirTime (rps_t rps, u1_t plen);
-ustime_t s2e_calcDnAirTime (rps_t rps, u1_t plen);
+ustime_t s2e_calcDnAirTime (rps_t rps, u1_t plen, u1_t lcrc, u2_t preamble);
 ustime_t s2e_updateMuxtime(s2ctx_t* s2ctx, double muxstime, ustime_t now);   // now=0 => rt_getTime(), return now
 
 void     s2e_ini          (s2ctx_t*);

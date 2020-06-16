@@ -1,0 +1,5 @@
+*.info
+tc.uri
+tc-bak*
+station.pid
+station.log

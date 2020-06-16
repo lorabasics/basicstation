@@ -1,0 +1,9 @@
+tc.uri
+tc.key
+tc.crt
+tc.trust
+tc-bak.*
+*.info
+station.log
+station.pid
+spidev

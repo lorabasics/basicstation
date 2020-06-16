@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+echo "Firmware update..."
+echo "Removing $0"
+rm $0
+echo "--- update.bin done ---"

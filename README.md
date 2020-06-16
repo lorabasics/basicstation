@@ -1,9 +1,11 @@
-# Basic Station
+[![Build Status](https://travis-ci.com/lorabasics/basicstation.svg?branch=master)](https://travis-ci.com/lorabasics/basicstation)
+
+# LoRa Basics™ Station
 
 [Basic Station](https://doc.sm.tc/station) is a LoRaWAN Gateway implementation, including features like
 
 *  **Ready for LoRaWAN Classes A, B, and C**
-*  **Unified Radio Abstraction Layer supporting Concentrator Reference Designs [v1.5](https://doc.sm.tc/station/gw_v1.5.html) and [v2](https://doc.sm.tc/station/gw_v2.html)**
+*  **Unified Radio Abstraction Layer supporting Concentrator Reference Designs [v1.5](https://doc.sm.tc/station/gw_v1.5.html), [v2](https://doc.sm.tc/station/gw_v2.html) and [Corecell](https://doc.sm.tc/station/gw_corecell.html)**
 
 *  **Powerful Backend Protocols** (read [here](https://doc.sm.tc/station/tcproto.html) and [here](https://doc.sm.tc/station/cupsproto.html))
     -  Centralized update and configuration management
@@ -69,6 +71,35 @@ RADIODEV=/dev/spidev0.0 ../../build-rpi-std/bin/station
 **Note:** The SPI device for the radio MAY be passed as an environment variable using `RADIODEV`.
 
 The example configuration connects to a public test server [s2.sm.tc](wss://s2.sm.tc) through which Station fetches all required credentials and a channel plan matching the region as determined from the IP address of the gateway. Provided there are active LoRa devices in proximity, received LoRa frames are printed in the log output on `stderr`.
+
+## Instruction for Supported Platfroms
+
+#### Corecell Platform (Raspberry Pi as HOST + [SX1302CxxxxGW Concentrator](https://www.semtech.com/products/wireless-rf/lora-gateways/sx1302cxxxgw1))
+
+##### Compile and Running the Example
+
+``` sourceCode
+cd basicstation
+make platform=corecell variant=std
+cd examples/corecell
+./start-station.sh -l ./lns-ttn
+```
+
+This example configuration for Corecell connects to [The Things Network](https://www.thethingsnetwork.org/) public LNS. The example [station.conf](station.conf) file holds the required radio configurations and station fetches the channel plan from the configured LNS url ([tc.uri](tc.uri)).
+
+#### PicoCell Gateway (Linux OS as HOST + [SX1308 USB Reference design](https://www.semtech.com/products/wireless-rf/lora-gateways/sx1308p868gw))
+
+
+##### Compile and Running the Example
+
+``` sourceCode
+cd basicstation
+make platform=linuxpico variant=std
+cd examples/live-s2.sm.tc
+RADIODEV=/dev/ttyACM0 ../../build-linuxpico-std/bin/station
+```
+
+**Note:** The serial device for the PicoCell MAY be passed as an environment variable using `RADIODEV`.
 
 ## Next Steps
 

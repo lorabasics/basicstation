@@ -8,15 +8,15 @@ Using the Station simulation environment, this example implements the two CUPS s
 
 ```
 CUPS "A" CA
- +- cups-0.{crt,key}         server auth
- +- cups-router-1.{crt,key}  client auth
+ ├── cups-0.{crt,key}         server auth
+ └── cups-router-1.{crt,key}  client auth
 CUPS "B" CA
- +- cups-1.{crt,key}         server auth
- +- cups-router-1.{crt,key}  client auth
+ ├── cups-1.{crt,key}         server auth
+ └── cups-router-1.{crt,key}  client auth
 TC CA
- +- muxs-0.{crt,key}         server auth
- +- infos-0.{crt,key}        server auth
- +- tc-router-1.{crt,key}    client auth
+ ├── muxs-0.{crt,key}         server auth
+ ├── infos-0.{crt,key}        server auth
+ └── tc-router-1.{crt,key}    client auth
 ```
 
 **Disclaimer:** The focus of this example is to demonstrate the capabilities of the CUPS protocol based on a common usage scenario for gateway management. For this purpose and the sake of simplicity, the PKI employed in this example is setup in very simple way and does not resemble a production grade PKI.
@@ -76,7 +76,7 @@ tc-0/tc-router-1.crt: OK
 == Prepare FW Update 1.0.0 -> 2.0.0 ==
 ```
 
-The `emulate` target first executes the `prep.sh` script which sets up the folder structure as expected by the simulation. First, the three self-signed CA certificates are generated and used to sign the certificates of all our server entities `cups-0`, `cups-1`, `tc-0`, as well as the client certificates for `router-1` expected by each of them. A signing key pair is generated and a signed updated is placed in `cups-1`. The public part of the signing key is copied to the Station home directory `./shome`. The final directory structure will look like this:
+The `emulate` target first executes the `prep.sh` script which sets up the folder structure as expected by the simulation. First, the three self-signed CA certificates are generated and used to sign the certificates of all our server entities `cups-0`, `cups-1`, `tc-0`, as well as the client certificates for `router-1` expected by each of them. A code signing key pair is generated and a signed update is placed in `cups-1`. The public part of the signing key is copied to the Station home directory `./shome`. The final directory structure will look like this:
 
 ```
 .
