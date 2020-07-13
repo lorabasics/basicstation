@@ -20,8 +20,8 @@ The Basics Station protocol enables the LoRa gateways with a reliable and secure
 
 ### Software
 
-* A TTN account ([sign up here](https://console.thethingsnetwork.org)
-* A balenaCloud account ([sign up here](https://dashboard.balena-cloud.com/)
+* A TTN account ([sign up here](https://console.thethingsnetwork.org))
+* A balenaCloud account ([sign up here](https://dashboard.balena-cloud.com/))
 * [balenaEtcher](https://balena.io/etcher)
 
 Once all of this is ready, you are able to deploy this repository following instructions below.
@@ -32,7 +32,7 @@ Once all of this is ready, you are able to deploy this repository following inst
 
 Running this project is as simple as deploying it to a balenaCloud application. You can do it in just one click by using the button below:
 
-[![](https://www.balena.io/deploy.png)](https://dashboard.balena-cloud.com/deploy?repoUrl=https://github.com/balena-io-playground/basicstation)
+[![](https://www.balena.io/deploy.png)](https://dashboard.balena-cloud.com/deploy?repoUrl=https://github.com/balenalabs/basicstation)
 
 Follow instructions, click Add a Device and flash an SD card with that OS image dowloaded from balenaCloud. Enjoy the magic 🌟Over-The-Air🌟!
 
