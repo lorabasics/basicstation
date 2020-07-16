@@ -80,7 +80,9 @@ Once successfully registered, copy the The Things Network gateway KEY to configu
 1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
 2. Click "Device Variables" button on the left menu and add these variables.
 
-Most of the variables have been generated automatically when the Application has been created with the Deploy with Balena button. However it's important to introduce the `GW_ID`and `GW_KEY`from the The Things Network console.
+Most of the variables have been generated automatically when the Application has been created with the Deploy with Balena button. Before starting check the region where you are going to deploy the gateway, de facto configuration is for EU gateways. Change the ```TC_URI```if you are in a different zone than European.
+
+And it's important to introduce the `GW_ID`and `GW_KEY`from the The Things Network console.
 
 
 Variable Name | Value | Description | Default
@@ -90,7 +92,7 @@ Variable Name | Value | Description | Default
 **`GW_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
 **`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11 
 **`SPI_SPEED`** | `STRING` | The Raspberry Pi and RAK2245 uses SPI to communicate and needs to use a specific speed | 20000000
-**`TC_URI`** | `STRING` | basics station TC URI to get connected. If you are in US region use ```wss://lns.us.thethings.network:443``` | ```wss://lns.eu.thethings.network:443```
+**`TC_URI`** | `STRING` | basics station TC URI to get connected. If you are in the EU region use ```wss://lns.{eu|us|in|au}.thethings.network:443``` | ```wss://lns.eu.thethings.network:443```
 
 
 At this moment your The Things Network gateway should be up and running. Check on the TTN console if it shows the connected status.
