@@ -15,7 +15,8 @@ WORKDIR /usr/src/app
 COPY . .
 
 # Compile our source code
-RUN make platform=rpi variant=std arch=%%BALENA_ARCH%%
+#RUN make platform=rpi variant=std arch=%%BALENA_ARCH%%
+RUN make platform=corecell variant=std arch=%%BALENA_ARCH%%
 
 # Launch our binary on container startup.
 CMD ["bash", "start.sh"]
