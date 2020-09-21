@@ -25,8 +25,7 @@ cd examples/corecell
 
 # Default to TTN server
 TC_URI=${TC_URI:-"wss://lns.eu.thethings.network:443"} 
-#TC_TRUST=${TC_TRUST:-$(curl https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem.txt)}
-TC_TRUST=${TC_TRUST:-$(curl https://letsencrypt.org/certs/trustid-x3-root.pem.txt)}
+TC_TRUST=${TC_TRUST:-$(curl https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem.txt)}
 
 
 GW_RESET_PIN=${GW_RESET_PIN:-22}
