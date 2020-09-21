@@ -1,6 +1,6 @@
-# LoRa Basics™ Station using balena.io and RAK2245
+# LoRa Basics™ Station using balena.io and RAK2287
 
-This project deploys a TTN LoRa gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2245 Pi Hat. 
+This project deploys a TTN LoRa gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2287 concentrator with a Pi Hat. 
 
 
 ## Introduction
@@ -15,7 +15,8 @@ The Basics Station protocol enables the LoRa gateways with a reliable and secure
 ### Hardware
 
 * Raspberry Pi 4 or [balenaFin](https://www.balena.io/fin/)
-* [RAK 2245 pi hat](https://store.rakwireless.com/products/rak2245-pi-hat)
+* [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module)
+* [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
 * SD card in case of the RPi 4
 
 ### Software
@@ -91,7 +92,7 @@ Variable Name | Value | Description | Default
 **`GW_ID`** | `STRING` | TTN Gateway EUI | (EUI)
 **`GW_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
 **`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11 
-**`SPI_SPEED`** | `STRING` | The Raspberry Pi and RAK2245 uses SPI to communicate and needs to use a specific speed | 2000000
+**`SPI_SPEED`** | `STRING` | The Raspberry Pi and RAK2287 uses SPI to communicate and needs to use a specific speed | 2000000
 **`TC_URI`** | `STRING` | basics station TC URI to get connected. If you are in the EU region use ```wss://lns.{eu-us-in-au}.thethings.network:443``` | ```wss://lns.eu.thethings.network:443```
 
 
