@@ -19,4 +19,4 @@ COPY . .
 RUN make platform=corecell variant=std arch=%%BALENA_ARCH%%
 
 # Launch our binary on container startup.
-CMD ["bash", "start.sh"]
+CMD ["bash", "start-corecell.sh"]
