@@ -78,7 +78,6 @@ fi
 
 STATION_BIN="../../build-corecell-$variant/bin/station"
 
-
 if [ -f "$STATION_BIN" ]; then
 	printf "Using variant=$variant, lns_config='$lns_config'\n"
 	printf "$GREEN Starting Station ... $NC\n"

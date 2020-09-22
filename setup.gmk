@@ -45,6 +45,7 @@ ARCH.linux.default   = x86_64-linux-gnu
 ARCH.linuxV2.default = x86_64-linux-gnu
 ARCH.linuxpico.default = x86_64-linux-gnu
 ARCH.corecell.default  = arm-linux-gnueabihf
+ARCH.corecell.aarch64  = aarch64-linux-gnu
 ARCH.rpi.armv7hf  = arm-linux-gnueabihf
 ARCH.rpi.aarch64  = aarch64-linux-gnu
 ARCH.kerlink.default = arm-klk-linux-gnueabi

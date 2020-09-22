@@ -1,6 +1,6 @@
-# LoRa Basics™ Station using balena.io and RAK2245
+# LoRa Basics™ Station using balena.io with RAK2245 or RAK 2287 concentrators
 
-This project deploys a TTN LoRa gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2245 Pi Hat. 
+This project deploys a TTN LoRa gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2245 and RAK2287 concentrator with a Pi Hat. 
 
 
 ## Introduction
@@ -15,8 +15,16 @@ The Basics Station protocol enables the LoRa gateways with a reliable and secure
 ### Hardware
 
 * Raspberry Pi 4 or [balenaFin](https://www.balena.io/fin/)
-* [RAK 2245 pi hat](https://store.rakwireless.com/products/rak2245-pi-hat)
 * SD card in case of the RPi 4
+
+#### LoRa Concentrators
+
+* [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module)
+* [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
+
+or
+
+* [RAK 2245 pi hat](https://store.rakwireless.com/products/rak2245-pi-hat)
 
 ### Software
 
@@ -50,7 +58,17 @@ If you are a balena CLI expert, feel free to use balena CLI.
 
 ## Configure the Gateway
 
-### Before configure your LoRa gateway
+### Define your MODEL
+
+In case that your LoRa concentrator is a ```RAK2287```, it's important to change the Device Variable with the correct ```MODEL```. The default ```MODEL``` on the balena Application is the ```RAK2245```.
+
+1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
+2. Click "Device Variables" button on the left menu and change the ```MODEL``` variable to ```RAK2287```.
+
+That enables a fleet of LoRa gateways with both ```RAK2245``` and ```RAK2287``` together under the same app.
+
+
+### Get the EUI of the LoRa Gateway
 
 The LoRa gateways are manufactured with a unique 64 bits (8 bytes) identifier, called EUI, which can be used to register the gateway on The Things Network. To get the EUI from your board it’s important to know the Ethernet MAC address of it. The TTN EUI will be the Ethernet mac address (6 bytes), which is unique, expanded with 2 more bytes (FFFE). This is a standard way to increment the MAC address from 6 to 8 bytes.
 
@@ -91,8 +109,9 @@ Variable Name | Value | Description | Default
 **`GW_ID`** | `STRING` | TTN Gateway EUI | (EUI)
 **`GW_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
 **`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11 
-**`SPI_SPEED`** | `STRING` | The Raspberry Pi and RAK2245 uses SPI to communicate and needs to use a specific speed | 2000000
+**`SPI_SPEED`** | `STRING` | The Raspberry Pi and RAK2287 uses SPI to communicate and needs to use a specific speed | 2000000
 **`TC_URI`** | `STRING` | basics station TC URI to get connected. If you are in the EU region use ```wss://lns.{eu-us-in-au}.thethings.network:443``` | ```wss://lns.eu.thethings.network:443```
+**`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287``` | ```RAK2245```
 
 
 At this moment your The Things Network gateway should be up and running. Check on the TTN console if it shows the connected status.
