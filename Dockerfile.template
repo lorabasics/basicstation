@@ -21,7 +21,7 @@ WORKDIR /usr/src/app
 
 COPY --from=builder /usr/src/app/ ./
 
-COPY start.sh ./
+COPY start* ./
 
 # Launch our binary on container startup.
 CMD ["bash", "start.sh"]
