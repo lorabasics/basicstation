@@ -1,4 +1,4 @@
-# LoRa Basics™ Station using balena.io and RAK2245 and RAK 2287
+# LoRa Basics™ Station using balena.io and RAK2245 or RAK 2287
 
 This project deploys a TTN LoRa gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2245 and RAK2287 concentrator with a Pi Hat. 
 
