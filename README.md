@@ -111,7 +111,7 @@ Variable Name | Value | Description | Default
 **`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11 
 **`SPI_SPEED`** | `STRING` | The Raspberry Pi and RAK2287 uses SPI to communicate and needs to use a specific speed | 2000000
 **`TC_URI`** | `STRING` | basics station TC URI to get connected. If you are in the EU region use ```wss://lns.{eu-us-in-au}.thethings.network:443``` | ```wss://lns.eu.thethings.network:443```
-**`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287```
+**`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287``` | ```RAK2245```
 
 
 At this moment your The Things Network gateway should be up and running. Check on the TTN console if it shows the connected status.
