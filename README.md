@@ -58,10 +58,10 @@ If you are a balena CLI expert, feel free to use balena CLI.
 
 ### Define your MODEL
 
-In case that your LoRa concentrator is a ```RAK2287```, it's important to change the Device Variable with the correct MODEL. The default MODEL on the balena Application is the ```RAK2245```.
+In case that your LoRa concentrator is a ```RAK2287```, it's important to change the Device Variable with the correct ```MODEL```. The default ```MODEL``` on the balena Application is the ```RAK2245```.
 
 1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
-2. Click "Device Variables" button on the left menu and change the MODEL variable to ```RAK2287```.
+2. Click "Device Variables" button on the left menu and change the ```MODEL``` variable to ```RAK2287```.
 
 That enables a fleet of LoRa gateways with both ```RAK2245``` and ```RAK2287``` together under the same app.
 
