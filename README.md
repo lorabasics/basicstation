@@ -56,7 +56,17 @@ If you are a balena CLI expert, feel free to use balena CLI.
 
 ## Configure the Gateway
 
-### Before configure your LoRa gateway
+### Define your MODEL
+
+In case that your LoRa concentrator is a ```RAK2287```, it's important to change the Device Variable with the correct MODEL. The default MODEL on the balena Application is the ```RAK2245```.
+
+1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
+2. Click "Device Variables" button on the left menu and change the MODEL variable to ```RAK2287```.
+
+That enables a fleet of LoRa gateways with both ```RAK2245``` and ```RAK2287``` together under the same app.
+
+
+### Get the EUI of the LoRa Gateway
 
 The LoRa gateways are manufactured with a unique 64 bits (8 bytes) identifier, called EUI, which can be used to register the gateway on The Things Network. To get the EUI from your board it’s important to know the Ethernet MAC address of it. The TTN EUI will be the Ethernet mac address (6 bytes), which is unique, expanded with 2 more bytes (FFFE). This is a standard way to increment the MAC address from 6 to 8 bytes.
 
@@ -67,15 +77,6 @@ If that does not work, go to the terminal box and click "Select a target", then 
 ```cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1FFFE\2#g' ```
 
 Copy the result and you are ready to register your gateway with this EUI.
-
-#### Define your MODEL
-
-In case that your LoRa concentrator is a RAK2287, it's important to change the Device Variable with the correct MODEL.
-
-1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
-2. Click "Device Variables" button on the left menu and change the MODEL variable to RAK2287.
-
-That enables a fleet of LoRa gateways with both RAK2245 and RAK2287 together under the same app.
 
 
 ### Configure your The Things Network gateway
