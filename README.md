@@ -1,6 +1,6 @@
-# LoRa Basics™ Station using balena.io and RAK2287
+# LoRa Basics™ Station using balena.io and RAK2245 and RAK 2287
 
-This project deploys a TTN LoRa gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2287 concentrator with a Pi Hat. 
+This project deploys a TTN LoRa gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2245 and RAK2287 concentrator with a Pi Hat. 
 
 
 ## Introduction
@@ -15,9 +15,14 @@ The Basics Station protocol enables the LoRa gateways with a reliable and secure
 ### Hardware
 
 * Raspberry Pi 4 or [balenaFin](https://www.balena.io/fin/)
+* SD card in case of the RPi 4
+
 * [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module)
 * [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
-* SD card in case of the RPi 4
+
+or
+
+* [RAK 2245 pi hat](https://store.rakwireless.com/products/rak2245-pi-hat)
 
 ### Software
 
@@ -63,6 +68,15 @@ If that does not work, go to the terminal box and click "Select a target", then 
 
 Copy the result and you are ready to register your gateway with this EUI.
 
+#### Define your MODEL
+
+In case that your LoRa concentrator is a RAK2287, it's important to change the Device Variable with the correct MODEL.
+
+1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
+2. Click "Device Variables" button on the left menu and change the MODEL variable to RAK2287.
+
+That enables a fleet of LoRa gateways with both RAK2245 and RAK2287 together under the same app.
+
 
 ### Configure your The Things Network gateway
 
@@ -93,7 +107,8 @@ Variable Name | Value | Description | Default
 **`GW_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
 **`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11 
 **`SPI_SPEED`** | `STRING` | The Raspberry Pi and RAK2287 uses SPI to communicate and needs to use a specific speed | 2000000
-**`TC_URI`** | `STRING` | basics station TC URI to get connected. If you are in the EU region use ```wss://lns.{eu-us-in-au}.thethings.network:443``` | ```wss://lns.eu.thethings.network:443```
+**`TC_URI`** | `STRING` | basics station TC URI to get connected. If you are in the EU region use ```wss://lns.{eu-us-in-au}.thethings.network:443``` | ```wss://lns.eu.thethings.network:443``
+**`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287```
 
 
 At this moment your The Things Network gateway should be up and running. Check on the TTN console if it shows the connected status.

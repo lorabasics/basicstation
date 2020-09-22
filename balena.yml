@@ -4,3 +4,6 @@ applicationEnvironmentVariables:
     - GW_RESET_PIN: 11
     - SPI_SPEED: 2000000
     - TC_URI: wss://lns.eu.thethings.network:443
+    - MODEL: RAK2245
+    - REGION: eu
+    
