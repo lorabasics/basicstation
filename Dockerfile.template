@@ -1,12 +1,6 @@
-FROM balenalib/%%BALENA_MACHINE_NAME%%-debian:stretch
+FROM balenalib/%%BALENA_MACHINE_NAME%%-debian:buster-build as builder
+# Install build tools and remove layer cache afterwards 
 
-# Install build tools and remove layer cache afterwards
-RUN apt-get -q update && apt-get install -yq --no-install-recommends \
-	build-essential \
-	git \
-	&& apt-get clean && rm -rf /var/lib/apt/lists/*
-
-RUN install_packages jq
 
 # Switch to working directory for our app
 WORKDIR /usr/src/app
@@ -15,8 +9,19 @@ WORKDIR /usr/src/app
 COPY . .
 
 # Compile our source code
-#RUN make platform=rpi variant=std arch=%%BALENA_ARCH%%
+RUN make platform=rpi variant=std arch=%%BALENA_ARCH%%
 RUN make platform=corecell variant=std arch=%%BALENA_ARCH%%
 
+
+FROM balenalib/%%BALENA_MACHINE_NAME%%-debian:buster
+
+RUN install_packages jq
+
+WORKDIR /usr/src/app
+
+COPY --from=builder /usr/src/app/ ./
+
+COPY start.sh ./
+
 # Launch our binary on container startup.
-CMD ["bash", "start-corecell.sh"]
+CMD ["bash", "start.sh"]
