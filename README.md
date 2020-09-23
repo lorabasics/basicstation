@@ -67,6 +67,8 @@ In case that your LoRa concentrator is a ```RAK2287```, it's important to change
 
 That enables a fleet of LoRa gateways with both ```RAK2245``` and ```RAK2287``` together under the same app.
 
+Before starting check the region where you are going to deploy the gateway, de facto configuration is for EU gateways. Change the ```TC_URI```if you are in a different zone than European.
+
 
 ### Get the EUI of the LoRa Gateway
 
@@ -93,14 +95,12 @@ Copy the result and you are ready to register your gateway with this EUI.
 
 ### Balena LoRa Basics Station Service Variables
 
-Once successfully registered, copy the The Things Network gateway KEY to configure your board variables on balenaCloud.
+Once successfully registered, copy the The Things Network gateway KEY and ID to configure your board variables on balenaCloud.
 
 1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
 2. Click "Device Variables" button on the left menu and add these variables.
 
-Most of the variables have been generated automatically when the Application has been created with the Deploy with Balena button. Before starting check the region where you are going to deploy the gateway, de facto configuration is for EU gateways. Change the ```TC_URI```if you are in a different zone than European.
-
-And it's important to introduce the `GW_ID`and `GW_KEY`from the The Things Network console.
+The `GW_ID`and `GW_KEY` variables have been generated automatically when the Application has been created with the Deploy with Balena button. Replace the values with the KEY and ID from the TTN console.
 
 
 Variable Name | Value | Description | Default
@@ -109,17 +109,18 @@ Variable Name | Value | Description | Default
 **`GW_ID`** | `STRING` | TTN Gateway EUI | (EUI)
 **`GW_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
 **`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11 
-**`SPI_SPEED`** | `STRING` | The Raspberry Pi and RAK2287 uses SPI to communicate and needs to use a specific speed | 2000000
 **`TC_URI`** | `STRING` | basics station TC URI to get connected. If you are in the EU region use ```wss://lns.{eu-us-in-au}.thethings.network:443``` | ```wss://lns.eu.thethings.network:443```
 **`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287``` | ```RAK2245```
 
 
 At this moment your The Things Network gateway should be up and running. Check on the TTN console if it shows the connected status.
 
+It's possible that on the TTN Console the gateway appears as Not connected if it's not receiving any LoRa message. Sometimes the websockets connection among the LoRa Gateway and the server can get broken. However a new LoRa package will re-open the websocket between the Gateway and TTN or TTI. This issue should be solved with the TTN v3.
+
 
 ## Attribution
 
 - This is an adaptation of the [Semtech Basics Station repository](https://github.com/lorabasics/basicstation). Documentation [here](https://doc.sm.tc/station).
 - This is in part working thanks of the work of Jose Marcelino from RAK Wireless and Marc Pous from balena.io.
-- This is in part based on excellent work done by the Balena.io Hardware Hackers team.
+- This is in part based on excellent work done by Rahul Thakoor from the Balena.io Hardware Hackers team.
 
