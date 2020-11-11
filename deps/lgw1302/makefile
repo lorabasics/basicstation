@@ -49,10 +49,10 @@ ${LGWLIB}: ${PLT}/libloragw/libloragw.a
 	@cp $< $@
 
 ${PLT}/libloragw/libloragw.a: ${SRCS} ${HFILES}
-	${MAKE} -C ${PLT}/libloragw libloragw.a CC=${CC} AR=${AR} LD=${LD} TDfull=${TDfull}
+	${MAKE} -C ${PLT}/libloragw libloragw.a CC="${CC}" AR="${AR}" LD="${LD}" TDfull=${TDfull}
 
 ${PLT}/libloragw/inc/config.h: ${PLT}/libloragw/library.cfg
-	${MAKE} -C ${PLT}/libloragw inc/config.h CC=${CC} AR=${AR} LD=${LD} TDfull=${TDfull}
+	${MAKE} -C ${PLT}/libloragw inc/config.h CC="${CC}" AR="${AR}" LD="${LD}" TDfull=${TDfull}
 
 ${LGWINC}/%.h: ${PLT}/libloragw/inc/%.h | ${LGWINC}
 	@echo "  CP    ${<F} -> $@"

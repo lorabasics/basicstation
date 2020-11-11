@@ -49,7 +49,7 @@ ARCH.kerlink = arm-klk-linux-gnueabi
 ARCH=${ARCH.${platform}}
 
 export TDfull := $(shell cd ${TD} && pwd)
-TOOLCHAIN=${HOME}/toolchain-${platform}
+TOOLCHAIN ?= ${HOME}/toolchain-${platform}
 
 
 ifeq (,$(wildcard ${TOOLCHAIN}))
@@ -65,11 +65,11 @@ else
 TOOLPREFIX=${TOOLCHAIN}/bin/${ARCH}-
 endif
 
-CC=${TOOLPREFIX}gcc
-LD=${TOOLPREFIX}ld
-AR=${TOOLPREFIX}ar
-OD=${TOOLPREFIX}objdump
-OC=${TOOLPREFIX}objcopy
+CC ?= ${TOOLPREFIX}gcc
+LD ?= ${TOOLPREFIX}ld
+AR ?= ${TOOLPREFIX}ar
+OD ?= ${TOOLPREFIX}objdump
+OC ?= ${TOOLPREFIX}objcopy
 
 ifeq (kerlink,${platform})
 # Needed for loader to find libmpfr.so.4
