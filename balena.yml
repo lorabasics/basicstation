@@ -16,7 +16,7 @@ data:
     - MODEL: RAK2245 
     - GW_ID: 0
     - GW_KEY: 0
-  defaultDeviceType: "raspberry-pi"
+  defaultDeviceType: "raspberrypi3"
   supportedDeviceTypes:
     - "raspberrypi3"
     - "raspberrypi3-64"
