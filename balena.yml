@@ -1,8 +1,23 @@
-
-applicationEnvironmentVariables:
+version: "2"
+slug: "balena-basicstation"
+name: "basicstation"
+type: "sw.application"
+assets:
+  - url: "https://github.com/balenalabs/basicstation"
+    name: "repository"
+  - url: "https://raw.githubusercontent.com/balenalabs/basicstation/master/logo.png"
+    name: "logo"
+data:
+  description: "Deploys a TTN LoRaWAN gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi with a RAK2245 and 2287 concentrator with a Pi Hat."
+  applicationEnvironmentVariables:
     - GW_GPS: false
     - GW_RESET_PIN: 11
     - TC_URI: wss://lns.eu.thethings.network:443
     - MODEL: RAK2245 
     - GW_ID: 0
     - GW_KEY: 0
+  defaultDeviceType: "raspberry-pi"
+  supportedDeviceTypes:
+    - "raspberrypi3"
+    - "raspberrypi4-64"
+    - "fincm3"
