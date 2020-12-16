@@ -1,6 +1,6 @@
 version: "2"
 slug: "balena-basicstation"
-name: "basicstation"
+name: "TTN basicstation gateway"
 type: "sw.application"
 assets:
   - url: "https://github.com/balenalabs/basicstation"
