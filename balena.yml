@@ -8,7 +8,7 @@ assets:
   - url: "https://raw.githubusercontent.com/balenalabs/basicstation/master/logo.png"
     name: "logo"
 data:
-  description: "Deploys a TTN LoRaWAN gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi with a RAK2245 and 2287 concentrators."
+  description: "Deploys a TTN LoRaWAN gateway with Basics Station Packet Forward protocol. It runs on a Raspberry Pi or Fin with a RAK2245 and 2287 concentrators."
   applicationEnvironmentVariables:
     - GW_GPS: false
     - GW_RESET_PIN: 11
