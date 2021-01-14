@@ -8,8 +8,13 @@ TC_TRUST=${TC_TRUST:-$(curl https://letsencrypt.org/certs/trustid-x3-root.pem.tx
 
 
 # Setup TC files from environment
-echo $TC_URI > ./lns-ttn/tc.uri
+echo "$TC_URI" > ./lns-ttn/tc.uri
 echo "$TC_TRUST" > ./lns-ttn/tc.trust
+
+if [ ! -z ${TC_KEY} ]; then
+	echo "Authorization: Bearer $TC_KEY" | perl -p -e 's/\r\n|\n|\r/\r\n/g'  > ./lns-ttn/tc.key
+fi
+
 
 ./start-station.sh -l ./lns-ttn
 
