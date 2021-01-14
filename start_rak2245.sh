@@ -18,6 +18,12 @@ GW_RESET_GPIO=${GW_RESET_GPIO:-${pinToGPIO[$GW_RESET_PIN]}}
 echo $TC_URI > tc.uri
 echo "$TC_TRUST" > tc.trust
 
+if [ ! -z ${TC_KEY} ]; then
+	echo "Authorization: Bearer $TC_KEY" | perl -p -e 's/\r\n|\n|\r/\r\n/g'  > tc.key
+fi
+
+
+
 # Reset gateway
 echo "Resetting gateway concentrator on GPIO $GW_RESET_GPIO"
 echo $GW_RESET_GPIO > /sys/class/gpio/export
