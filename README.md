@@ -1,11 +1,11 @@
 # LoRa Basics™ Station using balena.io with RAK2245 or RAK 2287 concentrators
 
-This project deploys a TTN LoRa gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2245 and RAK2287 concentrator with a Pi Hat. 
+This project deploys a LoRaWAN gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2245 and RAK2287 concentrator with a Pi Hat. 
 
 
 ## Introduction
 
-Deploy a The Things Network (TTN) LoRa gateway running the basics station Semtech Packet Forward protocol. We are using balena.io and RAK to reduce fricition for the LoRa gateway fleet owners.
+Deploy a The Things Network (TTN), The Things Industries (TTI) or The Things Stack (TTS) LoRaWAN gateway running the Basics Station Semtech Packet Forward protocol. We are using balena.io and RAK to reduce fricition for the LoRa gateway fleet owners.
 
 The Basics Station protocol enables the LoRa gateways with a reliable and secure communication between the gateways and the cloud and it is becoming the standard Packet Forward protocol used by most of the LoRaWAN operators.
 
@@ -89,16 +89,36 @@ Copy the result and you are ready to register your gateway with this EUI.
 2. Click Gateways button.
 3. Click the "Register gateway" link.
 4. Check “I’m using the legacy packet forwarder” checkbox.
-5. Paste the EUI from the Ethernet mac address of the board (calculated above)
+5. Paste the EUI from the balenaCloud tag or the Ethernet mac address of the board (calculated above)
 6. Complete the form and click Register gateway.
+7. Copy the Key generated on the gateway page.
+
+
+### Configure your The Things Stack gateway (The Things Conference 2021)
+
+1. Sign up at [The Things Stack console](https://ttc.eu1.cloud.thethings.industries/console/). 
+2. Click "Go to Gateways" icon.
+3. Click the "Add gateway" button.
+4. Introduce the data for the gateway.
+5. Paste the EUI from the balenaCloud tags.
+6. Complete the form and click Register gateway.
+7. Once the gateway is created, click "API keys" link.
+8. Click "Add API key" button.
+9. Select "Grant individual rights" and then "Link as Gateway to a Gateway Server for traffic exchange ..." and then click "Create API key".
+10. Copy the API key generated. and bring it to balenaCloud as ```TC_KEY```.
+
 
 
 ### Balena LoRa Basics Station Service Variables
 
-Once successfully registered, copy the The Things Network gateway KEY and ID to configure your board variables on balenaCloud.
+Once successfully registered:
 
 1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
 2. Click "Device Variables" button on the left menu and add these variables.
+
+#### The Things Network Variables
+
+Remember to copy the The Things Network gateway KEY and ID to configure your board variables on balenaCloud.
 
 The `GW_ID`and `GW_KEY` variables have been generated automatically when the Application has been created with the Deploy with Balena button. Replace the values with the KEY and ID from the TTN console.
 
@@ -113,7 +133,25 @@ Variable Name | Value | Description | Default
 **`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287``` | ```RAK2245```
 
 
-At this moment your The Things Network gateway should be up and running. Check on the TTN console if it shows the connected status.
+#### The Things Stack Variables
+
+Remember to generate an API Key and copy it. It will be the ```TC_KEY```.
+
+
+Variable Name | Value | Description | Default
+------------ | ------------- | ------------- | -------------
+**`GW_GPS`** | `STRING` | Enables GPS | true or false
+**`TC_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
+**`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11 
+**`TC_URI`** | `STRING` | Gateway Server address. If you are in the EU region use ```wss://ttc.eu1.cloud.thethings.industries:8887```
+**`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287``` | ```RAK2245```
+
+
+
+At this moment your LoRaWAN gateway should be up and running. Check on the TTN or TTS console if it shows the connected status.
+
+
+## Troubleshoothing
 
 It's possible that on the TTN Console the gateway appears as Not connected if it's not receiving any LoRa message. Sometimes the websockets connection among the LoRa Gateway and the server can get broken. However a new LoRa package will re-open the websocket between the Gateway and TTN or TTI. This issue should be solved with the TTN v3.
 
