@@ -1,0 +1,133 @@
+diff --git a/libloragw/Makefile b/libloragw/Makefile
+index 53c33d9..a8a09a2 100644
+--- a/libloragw/Makefile
++++ b/libloragw/Makefile
+@@ -7,6 +7,7 @@ include library.cfg
+
+ ARCH ?=
+ CROSS_COMPILE ?=
++
+ CC := $(CROSS_COMPILE)gcc
+ AR := $(CROSS_COMPILE)ar
+
+diff --git a/libloragw/inc/loragw_hal.h b/libloragw/inc/loragw_hal.h
+index d5f9ade..57927c4 100644
+--- a/libloragw/inc/loragw_hal.h
++++ b/libloragw/inc/loragw_hal.h
+@@ -414,6 +414,12 @@ const char* lgw_version_info(void);
+ */
+ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet);
+
++extern uint8_t lgwx_device_mode;
++extern uint8_t lgwx_beacon_len;
++extern uint8_t lgwx_beacon_sf;
++extern uint8_t lgwx_lbt_mode;
++enum { LGWX_LBT_MODE_DFLT=0, LGWX_LBT_MODE_OFF = 1 };
++
+ #endif
+
+ /* --- EOF ------------------------------------------------------------------ */
+diff --git a/libloragw/src/loragw_hal.c b/libloragw/src/loragw_hal.c
+index 8103751..d3ec1fb 100644
+--- a/libloragw/src/loragw_hal.c
++++ b/libloragw/src/loragw_hal.c
+@@ -226,11 +226,18 @@ int load_firmware(uint8_t target, uint8_t *firmware, uint16_t size) {
+
+ /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
++uint8_t lgwx_device_mode = 0;
++uint8_t lgwx_beacon_len = 0;
++uint8_t lgwx_beacon_sf = 0;
++uint8_t lgwx_lbt_mode = 0;
++
+ void lgw_constant_adjust(void) {
+
+     /* I/Q path setup */
+     // lgw_reg_w(LGW_RX_INVERT_IQ,0); /* default 0 */
+     // lgw_reg_w(LGW_MODEM_INVERT_IQ,1); /* default 1 */
++    if( lgwx_device_mode )
++	lgw_reg_w(LGW_MODEM_INVERT_IQ,0);
+     // lgw_reg_w(LGW_CHIRP_INVERT_RX,1); /* default 1 */
+     // lgw_reg_w(LGW_RX_EDGE_SELECT,0); /* default 0 */
+     // lgw_reg_w(LGW_MBWSSF_MODEM_INVERT_IQ,0); /* default 0 */
+@@ -280,6 +287,8 @@ void lgw_constant_adjust(void) {
+
+     // lgw_reg_w(LGW_PREAMBLE_FINE_TIMING_GAIN,1); /* default 1 */
+     // lgw_reg_w(LGW_ONLY_CRC_EN,1); /* default 1 */
++    if( lgwx_device_mode )
++	lgw_reg_w(LGW_ONLY_CRC_EN,0);
+     // lgw_reg_w(LGW_PAYLOAD_FINE_TIMING_GAIN,2); /* default 2 */
+     // lgw_reg_w(LGW_TRACKING_INTEGRAL,0); /* default 0 */
+     // lgw_reg_w(LGW_ADJUST_MODEM_START_OFFSET_RDX8,0); /* default 0 */
+@@ -300,11 +309,24 @@ void lgw_constant_adjust(void) {
+         lgw_reg_w(LGW_MBWSSF_FRAME_SYNCH_PEAK2_POS,2); /* default 2 */
+     }
+     // lgw_reg_w(LGW_MBWSSF_ONLY_CRC_EN,1); /* default 1 */
++    if( lgwx_device_mode )
++	lgw_reg_w(LGW_MBWSSF_ONLY_CRC_EN,0);
+     // lgw_reg_w(LGW_MBWSSF_PAYLOAD_FINE_TIMING_GAIN,2); /* default 2 */
+     // lgw_reg_w(LGW_MBWSSF_PREAMBLE_FINE_TIMING_GAIN,1); /* default 1 */
+     // lgw_reg_w(LGW_MBWSSF_TRACKING_INTEGRAL,0); /* default 0 */
+     // lgw_reg_w(LGW_MBWSSF_AGC_FREEZE_ON_DETECT,1); /* default 1 */
+
++    if( lgwx_device_mode && lgwx_beacon_len ) {
++	lgw_reg_w(LGW_MBWSSF_MODEM_INVERT_IQ,0);
++	lgw_reg_w(LGW_MBWSSF_RATE_SF, lgwx_beacon_sf);
++	lgw_reg_w(LGW_MBWSSF_IMPLICIT_HEADER,1); /* no header */
++	lgw_reg_w(LGW_MBWSSF_IMPLICIT_CRC_EN,0);
++	lgw_reg_w(LGW_MBWSSF_IMPLICIT_CODING_RATE,1);
++	lgw_reg_w(LGW_MBWSSF_IMPLICIT_PAYLOAD_LENGHT, lgwx_beacon_len);
++    } else {
++	lgw_reg_w(LGW_MBWSSF_MODEM_INVERT_IQ,1); //XXX:? correct?
++    }
++
+     /* Improvement of reference clock frequency error tolerance */
+     lgw_reg_w(LGW_ADJUST_MODEM_START_OFFSET_RDX4, 1); /* default 0 */
+     lgw_reg_w(LGW_ADJUST_MODEM_START_OFFSET_SF12_RDX4, 4094); /* default 4092 */
+@@ -1452,6 +1474,11 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+             break;
+     }
+
++    if( lgwx_device_mode ) {
++	pkt_data.invert_pol = false;
++	pkt_data.no_crc = false;
++    }
++
+     buff[0] = 0xFF & part_int; /* Most Significant Byte */
+     buff[1] = 0xFF & (part_frac >> 8); /* middle byte */
+     buff[2] = 0xFF & part_frac; /* Least Significant Byte */
+@@ -1600,10 +1627,17 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+     lgw_reg_wb(LGW_TX_DATA_BUF_DATA, buff, transfer_size);
+     DEBUG_ARRAY(i, transfer_size, buff);
+
+-    x = lbt_is_channel_free(&pkt_data, tx_start_delay, &tx_allowed);
+-    if (x != LGW_LBT_SUCCESS) {
+-        DEBUG_MSG("ERROR: Failed to check channel availability for TX\n");
+-        return LGW_HAL_ERROR;
++    if( lgwx_lbt_mode == LGWX_LBT_MODE_OFF ) {
++	tx_allowed = true;
++    } else {
++	//XXX:TBD: if( lgwx_lbt_mode == LGWX_LBT_MODE_EU868 ) {
++	//XXX:TBD:     // change txend time so that lbt_is_channel_free checks if dead gap is within 5ms (PSA rules)
++	//XXX:TBD: }
++	x = lbt_is_channel_free(&pkt_data, tx_start_delay, &tx_allowed);
++	if (x != LGW_LBT_SUCCESS) {
++	    DEBUG_MSG("ERROR: Failed to check channel availability for TX\n");
++	    return LGW_HAL_ERROR;
++	}
+     }
+     if (tx_allowed == true) {
+         switch(pkt_data.tx_mode) {
+diff --git a/libloragw/src/loragw_spi.native.c b/libloragw/src/loragw_spi.native.c
+index c01ed1c..0e2b64c 100644
+--- a/libloragw/src/loragw_spi.native.c
++++ b/libloragw/src/loragw_spi.native.c
+@@ -54,7 +54,7 @@ Maintainer: Sylvain Miermont
+ #define READ_ACCESS     0x00
+ #define WRITE_ACCESS    0x80
+ #define SPI_SPEED       8000000
+-#define SPI_DEV_PATH    "/dev/spidev0.0"
++#define SPI_DEV_PATH    (getenv("LORAGW_SPI")==NULL ? "/dev/spidev0.0" : getenv("LORAGW_SPI"))
+ //#define SPI_DEV_PATH    "/dev/spidev32766.0"
+
+ /* -------------------------------------------------------------------------- */
