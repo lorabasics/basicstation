@@ -1,14 +1,16 @@
-version: "2"
-slug: "balena-basicstation"
-name: "TTN basicstation Gateway"
+name: "TTN basicstation Gateway V3 and V2"
+description: "Deploys a TTN or The Things Stack LoRaWAN gateway with Basics Station Packet Forward protocol. It runs on a Raspberry Pi or Fin with a RAK2245 and 2287 concentrators."
 type: "sw.application"
 assets:
-  - url: "https://github.com/balenalabs/basicstation"
-    name: "repository"
-  - url: "https://raw.githubusercontent.com/balenalabs/basicstation/master/logo.png"
-    name: "logo"
+  repository:
+    type: "blob.asset"
+    data:
+      url: "https://github.com/balenalabs/basicstation"
+  logo:
+    type: "blob.asset"
+    data:
+      url: "https://raw.githubusercontent.com/balenalabs/basicstation/master/logo.png"
 data:
-  description: "Deploys a TTN LoRaWAN gateway with Basics Station Packet Forward protocol. It runs on a Raspberry Pi or Fin with a RAK2245 and 2287 concentrators."
   applicationEnvironmentVariables:
     - GW_GPS: false
     - GW_RESET_PIN: 11
@@ -16,7 +18,8 @@ data:
     - MODEL: RAK2245 
     - GW_ID: 0
     - GW_KEY: 0
-  defaultDeviceType: "raspberrypi3"
+    - TC_KEY: 0
+  defaultDeviceType: "raspberry-pi3"
   supportedDeviceTypes:
     - "raspberrypi3"
     - "raspberrypi3-64"
