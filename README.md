@@ -1,6 +1,6 @@
 # LoRa Basics™ Station using balena.io with RAK2245 or RAK 2287 concentrators
 
-This project deploys a LoRaWAN gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2245 and RAK2287 concentrator with a Pi Hat. 
+This project deploys a LoRaWAN gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2245 and RAK2287 concentrator with a Pi Hat.
 
 
 ## Introduction
@@ -85,7 +85,7 @@ Copy the result and you are ready to register your gateway with this EUI.
 
 ### Configure your The Things Network gateway
 
-1. Sign up at [The Things Network console](https://console.thethingsnetwork.org/). 
+1. Sign up at [The Things Network console](https://console.thethingsnetwork.org/).
 2. Click Gateways button.
 3. Click the "Register gateway" link.
 4. Check “I’m using the legacy packet forwarder” checkbox.
@@ -96,7 +96,7 @@ Copy the result and you are ready to register your gateway with this EUI.
 
 ### Configure your The Things Stack gateway (The Things Conference 2021)
 
-1. Sign up at [The Things Stack console](https://ttc.eu1.cloud.thethings.industries/console/). 
+1. Sign up at [The Things Stack console](https://ttc.eu1.cloud.thethings.industries/console/).
 2. Click "Go to Gateways" icon.
 3. Click the "Add gateway" button.
 4. Introduce the data for the gateway.
@@ -128,9 +128,9 @@ Variable Name | Value | Description | Default
 **`GW_GPS`** | `STRING` | Enables GPS | true or false
 **`GW_ID`** | `STRING` | TTN Gateway EUI | (EUI)
 **`GW_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
-**`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11 
+**`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11
 **`TC_URI`** | `STRING` | basics station TC URI to get connected. If you are in the EU region use ```wss://lns.{eu-us-in-au}.thethings.network:443``` | ```wss://lns.eu.thethings.network:443```
-**`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287``` | ```RAK2245```
+**`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287``` |
 
 
 #### The Things Stack Variables
@@ -142,9 +142,9 @@ Variable Name | Value | Description | Default
 ------------ | ------------- | ------------- | -------------
 **`GW_GPS`** | `STRING` | Enables GPS | true or false
 **`TC_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
-**`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11 
+**`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11
 **`TC_URI`** | `STRING` | Gateway Server address. If you are in the EU region use ```wss://ttc.eu1.cloud.thethings.industries:8887```
-**`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287``` | ```RAK2245```
+**`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287``` |
 
 
 
@@ -161,4 +161,3 @@ It's possible that on the TTN Console the gateway appears as Not connected if it
 - This is an adaptation of the [Semtech Basics Station repository](https://github.com/lorabasics/basicstation). Documentation [here](https://doc.sm.tc/station).
 - This is in part working thanks of the work of Jose Marcelino from RAK Wireless and Marc Pous from balena.io.
 - This is in part based on excellent work done by Rahul Thakoor from the Balena.io Hardware Hackers team.
-
