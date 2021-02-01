@@ -1,4 +1,4 @@
-#!/usr/bin/env bash 
+#!/usr/bin/env bash
 
 TAG_KEY="EUI"
 TTN_EUI=$(cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1FFFE\2#g')
@@ -20,7 +20,7 @@ TAG=$(curl -sX POST \
 
 if [ -z ${MODEL} ] ;
  then
-    echo -e "\033[91mWARNING: MODEL variable not set.\n Set the model of the gateway you are using."
+    echo -e "\033[91mWARNING: MODEL variable not set.\n Set the model of the gateway you are using.\033[0m"
     balena-idle
  else
     echo "Using MODEL: $MODEL"
@@ -31,6 +31,4 @@ if [ -z ${MODEL} ] ;
     if [ $MODEL = "RAK2287" ];then
         ./start_rak2287.sh
     fi
-fi 
-
-
+fi
