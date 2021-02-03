@@ -24,11 +24,11 @@ if [ -z ${MODEL} ] ;
     balena-idle
  else
     echo "Using MODEL: $MODEL"
-    if [ $MODEL = "RAK2245" ] | [$MODEL = "iC880a"];then
+    if [ "$MODEL" = "RAK2245" ] || [ "$MODEL" = "iC880a" ];then
         ./start_rak2245.sh
 
     fi
-    if [ $MODEL = "RAK2287" ];then
+    if [ "$MODEL" = "RAK2287" ];then
         ./start_rak2287.sh
     fi
 fi
