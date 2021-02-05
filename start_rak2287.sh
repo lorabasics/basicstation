@@ -4,7 +4,7 @@ cd examples/corecell
 
 # Default to TTN server
 TC_URI=${TC_URI:-"wss://lns.eu.thethings.network:443"} 
-TC_TRUST=${TC_TRUST:-$(curl https://letsencrypt.org/certs/trustid-x3-root.pem.txt)}
+TC_TRUST=${TC_TRUST:-$(curl --silent "https://letsencrypt.org/certs/{trustid-x3-root.pem.txt,isrgrootx1.pem}"))}
 
 
 # Setup TC files from environment
