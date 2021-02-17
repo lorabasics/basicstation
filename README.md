@@ -1,6 +1,6 @@
-# LoRa Basics™ Station using balena.io with RAK2245 or RAK 2287 concentrators
+# LoRa Basics™ Station using balena.io with RAK2245, RAK 2287 and IMST iC880a concentrators
 
-This project deploys a LoRaWAN gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi or balenaFin with a RAK2245 and RAK2287 concentrator with a Pi Hat.
+This project deploys a LoRaWAN gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi (3/4) or balenaFin with a RAK2245, RAK2287 and IMST iC880a LoRa concentrators.
 
 
 ## Introduction
@@ -21,6 +21,10 @@ The Basics Station protocol enables the LoRa gateways with a reliable and secure
 
 * [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module)
 * [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
+
+or
+
+* [IMST iC880a](https://shop.imst.de/wireless-modules/lora-products/8/ic880a-spi-lorawan-concentrator-868-mhz)
 
 or
 
@@ -60,7 +64,7 @@ If you are a balena CLI expert, feel free to use balena CLI.
 
 ### Define your MODEL
 
-In case that your LoRa concentrator is a ```RAK2287```, it's important to change the Device Variable with the correct ```MODEL```. The default ```MODEL``` on the balena Application is the ```RAK2245```.
+In case that your LoRa concentrator is a ```RAK2287``` or ```iC880a```, it's important to change the Device Variable with the correct ```MODEL```. The default ```MODEL``` on the balena Application is the ```RAK2245```.
 
 1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
 2. Click "Device Variables" button on the left menu and change the ```MODEL``` variable to ```RAK2287```.
@@ -130,7 +134,7 @@ Variable Name | Value | Description | Default
 **`GW_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
 **`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11
 **`TC_URI`** | `STRING` | basics station TC URI to get connected. If you are in the EU region use ```wss://lns.{eu-us-in-au}.thethings.network:443``` | ```wss://lns.eu.thethings.network:443```
-**`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287``` |
+**`MODEL`** | `STRING` | ```RAK2245``` , ```RAK2287``` or ```iC880a``` |
 
 
 #### The Things Stack Variables
@@ -144,7 +148,7 @@ Variable Name | Value | Description | Default
 **`TC_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
 **`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11
 **`TC_URI`** | `STRING` | Gateway Server address. If you are in the EU region use ```wss://ttc.eu1.cloud.thethings.industries:8887```
-**`MODEL`** | `STRING` | ```RAK2245``` or ```RAK2287``` |
+**`MODEL`** | `STRING` | ```RAK2245``` , ```RAK2287``` or ```iC880a``` |
 
 
 
