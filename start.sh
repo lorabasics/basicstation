@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 TAG_KEY="EUI"
-TTN_EUI=$(cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1FFFE\2#g')
+TTN_EUI=$(cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1fffe\2#g')
 
 echo $TTN_EUI
 

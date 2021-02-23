@@ -82,7 +82,7 @@ To get the EUI, copy the TAG of the device which will be generated automatically
 
 If that does not work, go to the terminal box and click "Select a target", then “HostOS”. Once you are inside the shell, type:
 
-```cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1FFFE\2#g' ```
+```cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1fffe\2#g' ```
 
 Copy the result and you are ready to register your gateway with this EUI.
 
