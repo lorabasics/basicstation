@@ -131,6 +131,7 @@ Variable Name | Value | Description | Default
 **`GW_RESET_PIN`** | `INT` | Pin number that resets (Raspberry Pi header number) | 11
 **`GW_RESET_GPIO`** | `INT` | GPIO number that resets (Broadcom pin number, if not defined, it's calculated based on the GW_RESET_PIN) | 17
 **`TTN_STACK_VERSION`** | `INT` | If using TTN, version of the stack. It can be either 2 (TTNv2) or 3 (TTS) | 2
+**`TTN_REGION`** | `STRING` | Region of the TTN server to use | ```eu``` when using TTNv2, ```eu1``` for TTS
 **`TC_URI`** | `STRING` | basics station TC URI to get connected.  | ```wss://lns.eu.thethings.network:443```
 **`TC_TRUST`** | `STRING` | Certificate for the server | Automatically retrieved from LetsEncryt based on the `TTN_STACK_VERSION` value
 **`MODEL`** | `STRING` | ```RAK2245``` , ```RAK2287``` or ```iC880a``` |
@@ -142,7 +143,7 @@ Remember to copy the The Things Network gateway KEY and ID to configure your boa
 
 The `GW_ID`and `GW_KEY` variables have been generated automatically when the Application has been created with the Deploy with Balena button. Replace the values with the KEY and ID from the TTN console.
 
-The `TC_URI` and `TC_TRUST` values are automatically populated to use ```wss://lns.eu.thethings.network:443``` if you set `TTN_STACK_VERSION` to 2. If your region is not EU you still have to set `TC_URI`. Use ```wss://lns.{eu-us-in-au}.thethings.network:443```.
+The `TC_URI` and `TC_TRUST` values are automatically populated to use ```wss://lns.eu.thethings.network:443``` if you set `TTN_STACK_VERSION` to 2. If your region is not EU you can set it using ```TTN_REGION```, Possible values are ```eu```, ```us```, ```in``` and ```au```.
 
 Variable Name | Value | Description | Default
 ------------ | ------------- | ------------- | -------------
@@ -154,7 +155,7 @@ Variable Name | Value | Description | Default
 
 Remember to generate an API Key and copy it. It will be the ```TC_KEY```.
 
-The `TC_URI` and `TC_TRUST` values are automatically populated to use ```wss://eu1.cloud.thethings.network:8887``` if you set `TTN_STACK_VERSION` to 3. If your region is not EU you still have to set `TC_URI`. At the moment there is only one server avalable (```eu1```).
+The `TC_URI` and `TC_TRUST` values are automatically populated to use ```wss://eu1.cloud.thethings.network:8887``` if you set `TTN_STACK_VERSION` to 3.If your region is not EU you can set it using ```TTN_REGION```. At the moment there is only one server avalable is ```eu1```.
 
 Variable Name | Value | Description | Default
 ------------ | ------------- | ------------- | -------------
