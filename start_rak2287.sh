@@ -17,5 +17,3 @@ fi
 export GW_RESET_GPIO=$GW_RESET_GPIO
 
 ./start-station.sh -l ./lns-ttn
-
-balena-idle

@@ -32,3 +32,5 @@ if [ -z ${MODEL} ] ;
         ./start_rak2287.sh
     fi
 fi
+
+#balena-idle
