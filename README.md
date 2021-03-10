@@ -82,7 +82,7 @@ To get the EUI, copy the TAG of the device which will be generated automatically
 
 If that does not work, go to the terminal box and click "Select a target", then “HostOS”. Once you are inside the shell, type:
 
-```cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1FFFE\2#g' ```
+```cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1fffe\2#g' ```
 
 Copy the result and you are ready to register your gateway with this EUI.
 
@@ -120,35 +120,46 @@ Once successfully registered:
 1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
 2. Click "Device Variables" button on the left menu and add these variables.
 
-#### The Things Network Variables
+Alternativelly, you can also set any of them at application level if you want it to apply to all devices in you application.
+
+
+#### Common Variables
+
+Variable Name | Value | Description | Default
+------------ | ------------- | ------------- | -------------
+**`GW_GPS`** | `STRING` | Enables GPS | true or false
+**`GW_RESET_PIN`** | `INT` | Pin number that resets (Raspberry Pi header number) | 11
+**`GW_RESET_GPIO`** | `INT` | GPIO number that resets (Broadcom pin number, if not defined, it's calculated based on the GW_RESET_PIN) | 17
+**`TTN_STACK_VERSION`** | `INT` | If using TTN, version of the stack. It can be either 2 (TTNv2) or 3 (TTS) | 2
+**`TTN_REGION`** | `STRING` | Region of the TTN server to use | ```eu``` when using TTNv2, ```eu1``` for TTS
+**`TC_URI`** | `STRING` | basics station TC URI to get connected.  | ```wss://lns.eu.thethings.network:443```
+**`TC_TRUST`** | `STRING` | Certificate for the server | Automatically retrieved from LetsEncryt based on the `TTN_STACK_VERSION` value
+**`MODEL`** | `STRING` | ```RAK2245``` , ```RAK2287``` or ```iC880a``` |
+
+
+#### The Things Network (TTNv2) Specific Variables
 
 Remember to copy the The Things Network gateway KEY and ID to configure your board variables on balenaCloud.
 
 The `GW_ID`and `GW_KEY` variables have been generated automatically when the Application has been created with the Deploy with Balena button. Replace the values with the KEY and ID from the TTN console.
 
+The `TC_URI` and `TC_TRUST` values are automatically populated to use ```wss://lns.eu.thethings.network:443``` if you set `TTN_STACK_VERSION` to 2. If your region is not EU you can set it using ```TTN_REGION```, Possible values are ```eu```, ```us```, ```in``` and ```au```.
 
 Variable Name | Value | Description | Default
 ------------ | ------------- | ------------- | -------------
-**`GW_GPS`** | `STRING` | Enables GPS | true or false
 **`GW_ID`** | `STRING` | TTN Gateway EUI | (EUI)
 **`GW_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
-**`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11
-**`TC_URI`** | `STRING` | basics station TC URI to get connected. If you are in the EU region use ```wss://lns.{eu-us-in-au}.thethings.network:443``` | ```wss://lns.eu.thethings.network:443```
-**`MODEL`** | `STRING` | ```RAK2245``` , ```RAK2287``` or ```iC880a``` |
 
 
-#### The Things Stack Variables
+#### The Things Stack (TTS) Specific Variables
 
 Remember to generate an API Key and copy it. It will be the ```TC_KEY```.
 
+The `TC_URI` and `TC_TRUST` values are automatically populated to use ```wss://eu1.cloud.thethings.network:8887``` if you set `TTN_STACK_VERSION` to 3.If your region is not EU you can set it using ```TTN_REGION```. At the moment there is only one server avalable is ```eu1```.
 
 Variable Name | Value | Description | Default
 ------------ | ------------- | ------------- | -------------
-**`GW_GPS`** | `STRING` | Enables GPS | true or false
 **`TC_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
-**`GW_RESET_PIN`** | `STRING` | Pin number that resets | 11
-**`TC_URI`** | `STRING` | Gateway Server address. If you are in the EU region use ```wss://ttc.eu1.cloud.thethings.industries:8887```
-**`MODEL`** | `STRING` | ```RAK2245``` , ```RAK2287``` or ```iC880a``` |
 
 
 
@@ -159,6 +170,17 @@ At this moment your LoRaWAN gateway should be up and running. Check on the TTN o
 
 It's possible that on the TTN Console the gateway appears as Not connected if it's not receiving any LoRa message. Sometimes the websockets connection among the LoRa Gateway and the server can get broken. However a new LoRa package will re-open the websocket between the Gateway and TTN or TTI. This issue should be solved with the TTN v3.
 
+## TTNv2 to TTS migration
+
+Initial state: one of more devices connected to TTNv2 stack (The Things Network).
+
+Proposed procedure:
+
+1. Create the gateways at TTS using the very same Gateway ID (Gateway EUI)
+2. Create a `TC_KEY` variable on each device sith the TTN Gateway Key pasted from the TTI console.
+3. Set the `TTN_STACK_VERSION` variable to 3, either at application level or per device
+
+Now you can move them from TTS to TTNv2 back and forth (using the `TTN_STACK_VERSION` variable) as you wish as long as the gateways are defined on both platforms and the `TC_KEY` and `GW_KEY` do not change.
 
 ## Attribution
 

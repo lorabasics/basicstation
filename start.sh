@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 TAG_KEY="EUI"
-TTN_EUI=$(cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1FFFE\2#g')
+TTN_EUI=$(cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1fffe\2#g')
 
-echo $TTN_EUI
+echo "Gateway EUI: $TTN_EUI"
 
 ID=$(curl -sX GET "https://api.balena-cloud.com/v5/device?\$filter=uuid%20eq%20'$BALENA_DEVICE_UUID'" \
 -H "Content-Type: application/json" \
@@ -32,3 +32,5 @@ if [ -z ${MODEL} ] ;
         ./start_rak2287.sh
     fi
 fi
+
+#balena-idle
