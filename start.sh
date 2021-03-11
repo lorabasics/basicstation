@@ -20,16 +20,15 @@ TAG=$(curl -sX POST \
 
 if [ -z ${MODEL} ] ;
  then
-    echo -e "\033[91mWARNING: MODEL variable not set.\n Set the model of the gateway you are using.\033[0m"
+    echo -e "\033[91mWARNING: MODEL variable not set.\n Set the model of the gateway you are using (SX1301 or SX1302).\033[0m"
     balena-idle
  else
     echo "Using MODEL: $MODEL"
-    if [ "$MODEL" = "RAK2245" ] || [ "$MODEL" = "iC880a" ];then
-        ./start_rak2245.sh
-
+    if [ "$MODEL" = "SX1301" ] || [ "$MODEL" = "RAK2245" ] || [ "$MODEL" = "iC880a" ];then
+        ./start_sx1301.sh
     fi
-    if [ "$MODEL" = "RAK2287" ];then
-        ./start_rak2287.sh
+    if [ "$MODEL" = "SX1302" ] || [ "$MODEL" = "RAK2287" ];then
+        ./start_sx1302.sh
     fi
 fi
 

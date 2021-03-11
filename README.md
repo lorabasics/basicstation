@@ -1,6 +1,6 @@
-# LoRa Basics™ Station using balena.io with RAK2245, RAK 2287 and IMST iC880a concentrators
+# LoRa Basics™ Station using balena.io with sx1301 and sx1302 LoRa concentrators
 
-This project deploys a LoRaWAN gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi (3/4) or balenaFin with a RAK2245, RAK2287 and IMST iC880a LoRa concentrators.
+This project deploys a LoRaWAN gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi (3/4) or balenaFin with a RAK2245, RAK2287 and IMST iC880a LoRa concentrators (sx1301 and sx1302).
 
 
 ## Introduction
@@ -19,20 +19,17 @@ The Basics Station protocol enables the LoRa gateways with a reliable and secure
 
 #### LoRa Concentrators
 
-* [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module)
-* [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
+* SX1301 
+ * [IMST iC880a](https://shop.imst.de/wireless-modules/lora-products/8/ic880a-spi-lorawan-concentrator-868-mhz)
+ * [RAK 2245 pi hat](https://store.rakwireless.com/products/rak2245-pi-hat)
 
-or
+* SX1302
+ * [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module) with [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
 
-* [IMST iC880a](https://shop.imst.de/wireless-modules/lora-products/8/ic880a-spi-lorawan-concentrator-868-mhz)
-
-or
-
-* [RAK 2245 pi hat](https://store.rakwireless.com/products/rak2245-pi-hat)
 
 ### Software
 
-* A TTN account ([sign up here](https://console.thethingsnetwork.org))
+* A TTN  or The Things Stack V3 account ([sign up here](https://console.thethingsnetwork.org)) or [here](https://ttc.eu1.cloud.thethings.industries/console/)
 * A balenaCloud account ([sign up here](https://dashboard.balena-cloud.com/))
 * [balenaEtcher](https://balena.io/etcher)
 
@@ -64,15 +61,19 @@ If you are a balena CLI expert, feel free to use balena CLI.
 
 ### Define your MODEL
 
-In case that your LoRa concentrator is a ```RAK2287``` or ```iC880a```, it's important to change the Device Variable with the correct ```MODEL```. The default ```MODEL``` on the balena Application is the ```RAK2245```.
+The model is defined depending on the version of the concentrator: ```SX1301``` or ```SX1302```. In case that your LoRa concentrator is a ```RAK2287``` it is using ```SX1302```. If the concentrator is the ```RAK2245``` or ```iC880a``` it uses the ```SX1301```. It's important to change the balenaCloud Device Variable with the correct ```MODEL```. The default ```MODEL``` on the balena Application is the ```SX1301```.
 
 1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
-2. Click "Device Variables" button on the left menu and change the ```MODEL``` variable to ```RAK2287```.
+2. Click "Device Variables" button on the left menu and change the ```MODEL``` variable to ```SX1302``` if needed.
 
-That enables a fleet of LoRa gateways with both ```RAK2245``` and ```RAK2287``` together under the same app.
+That enables a fleet of LoRa gateways with both (e.g.) ```RAK2245``` and ```RAK2287``` together under the same app.
 
-Before starting check the region where you are going to deploy the gateway, de facto configuration is for EU gateways. Change the ```TC_URI```if you are in a different zone than European.
+### Define your REGION and TTN STACK VERSION
 
+From now it's important to facilitate the ```TTN_STACK_VERSION``` that you are going to use ```2``` (TTN v2) or ```3``` (The Things Stack or TTN V3). The default variable is defined (still) into ```2```(V2).
+Before starting, also check the ```TTN_REGION```. It needs to be changed if your region is not Europe. In case you use version 3, the European version is ```eu1```. Check [here](https://www.thethingsnetwork.org/docs/lorawan/frequencies-by-country.html) the LoRa frequencies by country.
+
+With these variables ```TTN_REGION``` and ```TTN_STACK_VERSION``` the ```TC_URI``` will be generated automatically. In case that you want to point to another specific TC_URI, feel free to change this Device Variable on the balenaCloud.
 
 ### Get the EUI of the LoRa Gateway
 
@@ -134,7 +135,7 @@ Variable Name | Value | Description | Default
 **`TTN_REGION`** | `STRING` | Region of the TTN server to use | ```eu``` when using TTNv2, ```eu1``` for TTS
 **`TC_URI`** | `STRING` | basics station TC URI to get connected.  | ```wss://lns.eu.thethings.network:443```
 **`TC_TRUST`** | `STRING` | Certificate for the server | Automatically retrieved from LetsEncryt based on the `TTN_STACK_VERSION` value
-**`MODEL`** | `STRING` | ```RAK2245``` , ```RAK2287``` or ```iC880a``` |
+**`MODEL`** | `STRING` | ```SX1301``` or ```SX1302``` | ```SX1301```
 
 
 #### The Things Network (TTNv2) Specific Variables
@@ -185,5 +186,5 @@ Now you can move them from TTS to TTNv2 back and forth (using the `TTN_STACK_VER
 ## Attribution
 
 - This is an adaptation of the [Semtech Basics Station repository](https://github.com/lorabasics/basicstation). Documentation [here](https://doc.sm.tc/station).
-- This is in part working thanks of the work of Jose Marcelino from RAK Wireless and Marc Pous from balena.io.
+- This is in part working thanks of the work of Jose Marcelino from RAK Wireless, Xose Pérez from Allwize and Marc Pous from balena.io.
 - This is in part based on excellent work done by Rahul Thakoor from the Balena.io Hardware Hackers team.
