@@ -15,7 +15,6 @@ data:
     - GW_GPS: false
     - GW_RESET_PIN: 11
     - GW_RESET_GPIO: 17
-    - TC_URI: wss://lns.eu.thethings.network:443
     - MODEL: SX1301
     - TTN_STACK_VERSION: 2
     - TTN_REGION: eu 
