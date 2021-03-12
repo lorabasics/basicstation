@@ -1,5 +1,5 @@
-name: "TTN basicstation Gateway V3 and V2"
-description: "Deploys a TTN or The Things Stack LoRaWAN gateway with Basics Station Packet Forward protocol. It runs on a Raspberry Pi or Fin with a RAK2245 and 2287 concentrators."
+name: "TTN V2 V3 basicstation Gateway"
+description: "Deploys a TTN or The Things Stack LoRaWAN gateway with Basics Station Packet Forward protocol on SX1301 or SX1302 LoRa concentrators."
 type: "sw.application"
 assets:
   repository:
