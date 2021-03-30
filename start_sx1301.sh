@@ -22,4 +22,4 @@ echo 1 > /sys/class/gpio/gpio$GW_RESET_GPIO/value
 echo 0 > /sys/class/gpio/gpio$GW_RESET_GPIO/value
 echo $GW_RESET_GPIO > /sys/class/gpio/unexport
 
-RADIODEV=/dev/spidev0.0 ../../build-rpi-std/bin/station 
+RADIODEV=$LORAGW_SPI ../../build-rpi-std/bin/station
