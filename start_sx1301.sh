@@ -18,8 +18,11 @@ echo "Resetting gateway concentrator on GPIO $GW_RESET_GPIO"
 echo $GW_RESET_GPIO > /sys/class/gpio/export
 echo out > /sys/class/gpio/gpio$GW_RESET_GPIO/direction
 echo 0 > /sys/class/gpio/gpio$GW_RESET_GPIO/value
+sleep 1
 echo 1 > /sys/class/gpio/gpio$GW_RESET_GPIO/value
+sleep 1
 echo 0 > /sys/class/gpio/gpio$GW_RESET_GPIO/value
+sleep 1
 echo $GW_RESET_GPIO > /sys/class/gpio/unexport
 
-RADIODEV=/dev/spidev0.0 ../../build-rpi-std/bin/station 
+RADIODEV=$LORAGW_SPI ../../build-rpi-std/bin/station
