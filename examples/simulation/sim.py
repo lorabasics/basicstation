@@ -147,11 +147,16 @@ async def start_test():
     await start_sim()
     await start_station()
 
+async def start_stationsim():
+    await start_lgwsim()
+    await start_station()
+
 func = None
 if len(sys.argv) > 1:
     func = {
         'tc': start_tcsim,
         'lgwsim': start_lgwsim,
+        'stationsim': start_stationsim,
         'sim': start_sim,
         'station': start_station
     }.get(sys.argv[1], None)
