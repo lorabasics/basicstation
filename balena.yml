@@ -1,8 +1,13 @@
-name: 'The Things Stack Gateway'
+name: The Things Stack Gateway
 type: sw.application
 description: >-
   Deploys the The Things Stack LoRaWAN gateway with Basics Station 
   Packet Forward protocol on SX1301 or SX1302 LoRa concentrators.
+fleetcta: Build a LoRaWAN gateway
+post-provisioning: >-
+  ## Usage instructions
+  Once your device joins the fleet you'll need to get the EUI of the device and create a gateway on The Things Network (V2) or The Things Stack (V3).
+  For detailed instructions on how to use configure your LoRaWAN gteway check out the [readme here](https://github.com/balenalabs/basicstation).
 assets:
   repository:
     type: blob.asset
