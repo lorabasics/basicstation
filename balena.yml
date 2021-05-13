@@ -1,15 +1,18 @@
-name: "TTN V2 V3 basicstation Gateway"
-description: "Deploys a TTN or The Things Stack LoRaWAN gateway with Basics Station Packet Forward protocol on SX1301 or SX1302 LoRa concentrators."
-type: "sw.application"
+name: 'The Things Stack Gateway'
+type: sw.application
+description: >-
+  Deploys the The Things Stack LoRaWAN gateway with Basics Station 
+  Packet Forward protocol on SX1301 or SX1302 LoRa concentrators.
 assets:
   repository:
-    type: "blob.asset"
+    type: blob.asset
     data:
-      url: "https://github.com/balenalabs/basicstation"
+      url: 'https://github.com/balenalabs/basicstation'
   logo:
-    type: "blob.asset"
+    type: blob.asset
     data:
-      url: "https://raw.githubusercontent.com/balenalabs/basicstation/master/logo.png"
+      url: >-
+        https://raw.githubusercontent.com/balenalabs/basicstation/master/logo.png
 data:
   applicationEnvironmentVariables:
     - GW_GPS: false
@@ -21,9 +24,8 @@ data:
     - GW_ID: 0
     - GW_KEY: 0
     - TC_KEY: 0
-  defaultDeviceType: "raspberry-pi3"
+  defaultDeviceType: raspberry-pi3
   supportedDeviceTypes:
-    - "raspberrypi3"
-    - "raspberrypi3-64"
-    - "raspberrypi4-64"
-    - "fincm3"
+    - raspberrypi3-64
+    - raspberrypi4-64
+    - fincm3
