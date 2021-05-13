@@ -31,9 +31,9 @@ data:
     - GW_ID: 0
     - GW_KEY: 0
     - TC_KEY: 0
-  defaultDeviceType: raspberry-pi3
+  defaultDeviceType: raspberrypi3
   supportedDeviceTypes:
-    - raspberry-pi3
+    - raspberrypi3
     - raspberrypi3-64
     - raspberrypi4-64
     - fincm3
