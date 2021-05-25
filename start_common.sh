@@ -3,11 +3,11 @@ TTN_STACK_VERSION=${TTN_STACK_VERSION:-2}
 if [ $TTN_STACK_VERSION -eq 2 ]; then
 	TTN_REGION=${TTN_REGION:-"eu"}
 	TC_URI=${TC_URI:-"wss://lns.${TTN_REGION}.thethings.network:443"} 
-	TC_TRUST=${TC_TRUST:-$(curl --silent "https://letsencrypt.org/certs/trustid-x3-root.pem.txt"))}
+	TC_TRUST=${TC_TRUST:-$(curl --silent "https://letsencrypt.org/certs/trustid-x3-root.pem.txt")}
 elif [ $TTN_STACK_VERSION -eq 3 ]; then
 	TTN_REGION=${TTN_REGION:-"eu1"}
 	TC_URI=${TC_URI:-"wss://${TTN_REGION}.cloud.thethings.network:8887"} 
-	TC_TRUST=${TC_TRUST:-$(curl --silent "https://letsencrypt.org/certs/{trustid-x3-root.pem.txt,isrgrootx1.pem}"))}
+	TC_TRUST=${TC_TRUST:-$(curl --silent "https://letsencrypt.org/certs/{trustid-x3-root.pem.txt,isrgrootx1.pem}")}
 else
     echo -e "\033[91mERROR: Wrong TTN_STACK_VERSION value, should be either 2 o 3.\033[0m"
 	balena-idle
