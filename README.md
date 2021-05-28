@@ -88,18 +88,7 @@ If that does not work, go to the terminal box and click "Select a target", then 
 Copy the result and you are ready to register your gateway with this EUI.
 
 
-### Configure your The Things Network gateway
-
-1. Sign up at [The Things Network console](https://console.thethingsnetwork.org/).
-2. Click Gateways button.
-3. Click the "Register gateway" link.
-4. Check “I’m using the legacy packet forwarder” checkbox.
-5. Paste the EUI from the balenaCloud tag or the Ethernet mac address of the board (calculated above)
-6. Complete the form and click Register gateway.
-7. Copy the Key generated on the gateway page.
-
-
-### Configure your The Things Stack gateway (The Things Conference 2021)
+### Configure your The Things Stack gateway (V3)
 
 1. Sign up at [The Things Stack console](https://ttc.eu1.cloud.thethings.industries/console/).
 2. Click "Go to Gateways" icon.
@@ -112,6 +101,15 @@ Copy the result and you are ready to register your gateway with this EUI.
 9. Select "Grant individual rights" and then "Link as Gateway to a Gateway Server for traffic exchange ..." and then click "Create API key".
 10. Copy the API key generated. and bring it to balenaCloud as ```TC_KEY```.
 
+### Configure your The Things Network gateway (V2)
+
+1. Sign up at [The Things Network console](https://console.thethingsnetwork.org/).
+2. Click Gateways button.
+3. Click the "Register gateway" link.
+4. Check “I’m using the legacy packet forwarder” checkbox.
+5. Paste the EUI from the balenaCloud tag or the Ethernet mac address of the board (calculated above)
+6. Complete the form and click Register gateway.
+7. Copy the Key generated on the gateway page.
 
 
 ### Balena LoRa Basics Station Service Variables
@@ -131,14 +129,25 @@ Variable Name | Value | Description | Default
 **`GW_GPS`** | `STRING` | Enables GPS | true or false
 **`GW_RESET_PIN`** | `INT` | Pin number that resets (Raspberry Pi header number) | 11
 **`GW_RESET_GPIO`** | `INT` | GPIO number that resets (Broadcom pin number, if not defined, it's calculated based on the GW_RESET_PIN) | 17
-**`TTN_STACK_VERSION`** | `INT` | If using TTN, version of the stack. It can be either 2 (TTNv2) or 3 (TTS) | 2
-**`TTN_REGION`** | `STRING` | Region of the TTN server to use | ```eu``` when using TTNv2, ```eu1``` for TTS
-**`TC_URI`** | `STRING` | basics station TC URI to get connected.  | ```wss://lns.eu.thethings.network:443```
+**`TTN_STACK_VERSION`** | `INT` | If using TTN, version of the stack. It can be either 2 (TTNv2) or 3 (TTS) | 3
+**`TTN_REGION`** | `STRING` | Region of the TTN server to use | ```eu1``` (when using TTN v2 use ```eu```)
+**`TC_URI`** | `STRING` | basics station TC URI to get connected.  | 
 **`TC_TRUST`** | `STRING` | Certificate for the server | Automatically retrieved from LetsEncryt based on the `TTN_STACK_VERSION` value
 **`MODEL`** | `STRING` | ```SX1301``` or ```SX1302``` | ```SX1301```
 
 
-#### The Things Network (TTNv2) Specific Variables
+#### The Things Stack (TTS) Specific Variables (V3)
+
+Remember to generate an API Key and copy it. It will be the ```TC_KEY```.
+
+The `TC_URI` and `TC_TRUST` values are automatically populated to use ```wss://eu1.cloud.thethings.network:8887``` if you set `TTN_STACK_VERSION` to 3.If your region is not EU you can set it using ```TTN_REGION```. At the moment there is only one server avalable is ```eu1```.
+
+Variable Name | Value | Description | Default
+------------ | ------------- | ------------- | -------------
+**`TC_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
+
+
+#### The Things Network (TTNv2) Specific Variables (V2)
 
 Remember to copy the The Things Network gateway KEY and ID to configure your board variables on balenaCloud.
 
@@ -150,18 +159,6 @@ Variable Name | Value | Description | Default
 ------------ | ------------- | ------------- | -------------
 **`GW_ID`** | `STRING` | TTN Gateway EUI | (EUI)
 **`GW_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
-
-
-#### The Things Stack (TTS) Specific Variables
-
-Remember to generate an API Key and copy it. It will be the ```TC_KEY```.
-
-The `TC_URI` and `TC_TRUST` values are automatically populated to use ```wss://eu1.cloud.thethings.network:8887``` if you set `TTN_STACK_VERSION` to 3.If your region is not EU you can set it using ```TTN_REGION```. At the moment there is only one server avalable is ```eu1```.
-
-Variable Name | Value | Description | Default
------------- | ------------- | ------------- | -------------
-**`TC_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
-
 
 
 At this moment your LoRaWAN gateway should be up and running. Check on the TTN or TTS console if it shows the connected status.
