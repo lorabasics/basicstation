@@ -7,7 +7,7 @@ joinable: false
 post-provisioning: >-
   ## Usage instructions
   
-  Once your device joins the fleet you'll need to get the EUI of the device and create a gateway on The Things Network (V2) or The Things Stack (V3).
+  Fork this fleet and deploy the project on a balenaCloud application. Once the project released on a device, you'll need to get the EUI of the device and create a gateway on The Things Stack (V3).
   
   For detailed instructions on how to use configure your LoRaWAN gteway check out the [readme here](https://github.com/balenalabs/basicstation).
 assets:
