@@ -1,20 +1,20 @@
 # LoRa Basics™ Station using balena.io with sx1301 and sx1302 LoRa concentrators
 
-This project deploys a LoRaWAN gateway with Basics Station Packet Forward protocol with balena. It runs on a Raspberry Pi (3/4) or balenaFin with a RAK2245, RAK2287 and IMST iC880a LoRa concentrators (sx1301 and sx1302).
+This project deploys a LoRaWAN gateway with Basics™ Station Packet Forward protocol with balena. It runs on a Raspberry Pi (3/4) or balenaFin with sx1301 and sx1302 LoRa concentrators (e.g. RAK833, RAK2245, RAK2287 and IMST iC880a among others).
 
 
 ## Introduction
 
-Deploy a The Things Network (TTN), The Things Industries (TTI) or The Things Stack (TTS) LoRaWAN gateway running the Basics Station Semtech Packet Forward protocol. We are using balena.io and RAK to reduce fricition for the LoRa gateway fleet owners.
+Deploy a The Things Stack (TTS v3) LoRaWAN gateway running the Basics™ Station Semtech Packet Forward protocol. We are using balena.io and RAK to reduce fricition for the LoRa gateway fleet owners. This project has been tested with The Things Network (TTN v2) and The Things Industries (TTI) as well.
 
-The Basics Station protocol enables the LoRa gateways with a reliable and secure communication between the gateways and the cloud and it is becoming the standard Packet Forward protocol used by most of the LoRaWAN operators.
+The Basics™ Station protocol enables the LoRa gateways with a reliable and secure communication between the gateways and the cloud and it is becoming the standard Packet Forward protocol used by most of the LoRaWAN operators.
 
 
 ## Getting started
 
 ### Hardware
 
-* Raspberry Pi 4 or [balenaFin](https://www.balena.io/fin/)
+* Raspberry Pi 3/4 or [balenaFin](https://www.balena.io/fin/)
 * SD card in case of the RPi 4
 
 #### LoRa Concentrators
@@ -22,6 +22,7 @@ The Basics Station protocol enables the LoRa gateways with a reliable and secure
 * SX1301 
  * [IMST iC880a](https://shop.imst.de/wireless-modules/lora-products/8/ic880a-spi-lorawan-concentrator-868-mhz)
  * [RAK 2245 pi hat](https://store.rakwireless.com/products/rak2245-pi-hat)
+ * RAK833
 
 * SX1302
  * [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module) with [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
@@ -29,7 +30,7 @@ The Basics Station protocol enables the LoRa gateways with a reliable and secure
 
 ### Software
 
-* A TTN  or The Things Stack V3 account ([sign up here](https://console.thethingsnetwork.org)) or [here](https://ttc.eu1.cloud.thethings.industries/console/)
+* A The Things Stack V3 account [here](https://ttc.eu1.cloud.thethings.industries/console/)
 * A balenaCloud account ([sign up here](https://dashboard.balena-cloud.com/))
 * [balenaEtcher](https://balena.io/etcher)
 
@@ -61,7 +62,9 @@ If you are a balena CLI expert, feel free to use balena CLI.
 
 ### Define your MODEL
 
-The model is defined depending on the version of the concentrator: ```SX1301``` or ```SX1302```. In case that your LoRa concentrator is a ```RAK2287``` it is using ```SX1302```. If the concentrator is the ```RAK2245``` or ```iC880a``` it uses the ```SX1301```. It's important to change the balenaCloud Device Variable with the correct ```MODEL```. The default ```MODEL``` on the balena Application is the ```SX1301```.
+The model is defined depending on the version of the concentrator: ```SX1301``` or ```SX1302```. 
+
+In case that your LoRa concentrator is a ```RAK2287``` it is using ```SX1302```. If the concentrator is the ```RAK2245``` or ```iC880a``` it uses the ```SX1301```. It's important to change the balenaCloud Device Variable with the correct ```MODEL```. The default ```MODEL``` on the balena Application is the ```SX1301```.
 
 1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
 2. Click "Device Variables" button on the left menu and change the ```MODEL``` variable to ```SX1302``` if needed.
@@ -70,16 +73,19 @@ That enables a fleet of LoRa gateways with both (e.g.) ```RAK2245``` and ```RAK2
 
 ### Define your REGION and TTN STACK VERSION
 
-From now it's important to facilitate the ```TTN_STACK_VERSION``` that you are going to use ```2``` (TTN v2) or ```3``` (The Things Stack or TTN V3). The default variable is defined (still) into ```2```(V2).
+From now it's important to facilitate the ```TTN_STACK_VERSION``` that you are going to use: ```3``` (The Things Stack v3) or ```2``` (The Things Network or TTN V2). The default variable is set into ```3```(V3).
+
 Before starting, also check the ```TTN_REGION```. It needs to be changed if your region is not Europe. In case you use version 3, the European version is ```eu1```. Check [here](https://www.thethingsnetwork.org/docs/lorawan/frequencies-by-country.html) the LoRa frequencies by country.
 
-With these variables ```TTN_REGION``` and ```TTN_STACK_VERSION``` the ```TC_URI``` will be generated automatically. In case that you want to point to another specific TC_URI, feel free to change this Device Variable on the balenaCloud.
+With these variables ```TTN_REGION``` and ```TTN_STACK_VERSION``` the ```TC_URI``` will be generated automatically. In case that you want to point to another specific ```TC_URI```, feel free to add this Device Variable on the balenaCloud.
 
 ### Get the EUI of the LoRa Gateway
 
-The LoRa gateways are manufactured with a unique 64 bits (8 bytes) identifier, called EUI, which can be used to register the gateway on The Things Network. To get the EUI from your board it’s important to know the Ethernet MAC address of it. The TTN EUI will be the Ethernet mac address (6 bytes), which is unique, expanded with 2 more bytes (FFFE). This is a standard way to increment the MAC address from 6 to 8 bytes.
+The LoRa gateways are manufactured with a unique 64 bits (8 bytes) identifier, called EUI, which can be used to register the gateway on The Things Network and The Things Stack. To get the EUI from your board it’s important to know the Ethernet MAC address of it (this is not going to work if your device does not have Ethernet port). 
 
-To get the EUI, copy the TAG of the device which will be generated automatically when the device gets provisioned on balenaCloud.
+The ```EUI``` will be the Ethernet mac address (6 bytes), which is unique, expanded with 2 more bytes (FFFE). This is a standard way to increment the MAC address from 6 to 8 bytes.
+
+To get the ```EUI```, copy the TAG of the device which will be generated automatically when the device gets provisioned on balenaCloud for first time. Be careful when you copy the tag, as other characters will be copied.
 
 If that does not work, go to the terminal box and click "Select a target", then “HostOS”. Once you are inside the shell, type:
 
@@ -131,10 +137,9 @@ Variable Name | Value | Description | Default
 **`GW_RESET_GPIO`** | `INT` | GPIO number that resets (Broadcom pin number, if not defined, it's calculated based on the GW_RESET_PIN) | 17
 **`TTN_STACK_VERSION`** | `INT` | If using TTN, version of the stack. It can be either 2 (TTNv2) or 3 (TTS) | 3
 **`TTN_REGION`** | `STRING` | Region of the TTN server to use | ```eu1``` (when using TTN v2 use ```eu```)
-**`TC_URI`** | `STRING` | basics station TC URI to get connected.  | 
 **`TC_TRUST`** | `STRING` | Certificate for the server | Automatically retrieved from LetsEncryt based on the `TTN_STACK_VERSION` value
 **`MODEL`** | `STRING` | ```SX1301``` or ```SX1302``` | ```SX1301```
-
+**`TC_URI`** | `STRING` | basics station TC URI to get connected.  | 
 
 #### The Things Stack (TTS) Specific Variables (V3)
 
@@ -168,6 +173,9 @@ At this moment your LoRaWAN gateway should be up and running. Check on the TTN o
 
 It's possible that on the TTN Console the gateway appears as Not connected if it's not receiving any LoRa message. Sometimes the websockets connection among the LoRa Gateway and the server can get broken. However a new LoRa package will re-open the websocket between the Gateway and TTN or TTI. This issue should be solved with the TTN v3.
 
+Feel free to introduce issues on this repo and contribute with solutions.
+
+
 ## TTNv2 to TTS migration
 
 Initial state: one of more devices connected to TTNv2 stack (The Things Network).
@@ -179,6 +187,7 @@ Proposed procedure:
 3. Set the `TTN_STACK_VERSION` variable to 3, either at application level or per device
 
 Now you can move them from TTS to TTNv2 back and forth (using the `TTN_STACK_VERSION` variable) as you wish as long as the gateways are defined on both platforms and the `TC_KEY` and `GW_KEY` do not change.
+
 
 ## Attribution
 
