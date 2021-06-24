@@ -20,12 +20,12 @@ The Basics™ Station protocol enables the LoRa gateways with a reliable and sec
 #### LoRa Concentrators
 
 * SX1301 
- * [IMST iC880a](https://shop.imst.de/wireless-modules/lora-products/8/ic880a-spi-lorawan-concentrator-868-mhz)
- * [RAK 2245 pi hat](https://store.rakwireless.com/products/rak2245-pi-hat)
- * RAK833
+> * [IMST iC880a](https://shop.imst.de/wireless-modules/lora-products/8/ic880a-spi-lorawan-concentrator-868-mhz)
+> * [RAK 2245 pi hat](https://store.rakwireless.com/products/rak2245-pi-hat)
+> * RAK833
 
 * SX1302
- * [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module) with [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
+> * [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module) with [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
 
 
 ### Software
