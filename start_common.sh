@@ -23,7 +23,7 @@ fi
 echo "Server: $TC_URI"
 
 # Sanitize TC_TRUST
-TC_TRUST=$(echo $TC_TRUST | sed 's/-----BEGIN CERTIFICATE-----/-----BEGIN CERTIFICATE-----\n/' | sed 's/-----END CERTIFICATE-----/\n-----END CERTIFICATE-----/' | sed 's/\n\n/\n/g')
+#TC_TRUST=$(echo $TC_TRUST | sed 's/-----BEGIN CERTIFICATE-----/-----BEGIN CERTIFICATE-----\n/' | sed 's/-----END CERTIFICATE-----/\n-----END CERTIFICATE-----/' | sed 's/\n\n/\n/g')
 
 # declare map of hardware pins to GPIO on Raspberry Pi
 declare -a pinToGPIO
