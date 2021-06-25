@@ -1,17 +1,18 @@
 # Defaults to TTN server v2, EU region
-TTN_STACK_VERSION=${TTN_STACK_VERSION:-2}
+TTN_STACK_VERSION=${TTN_STACK_VERSION:-3}
 if [ $TTN_STACK_VERSION -eq 2 ]; then
 	TTN_REGION=${TTN_REGION:-"eu"}
 	TC_URI=${TC_URI:-"wss://lns.${TTN_REGION}.thethings.network:443"} 
-	TC_TRUST=${TC_TRUST:-$(curl --silent "https://letsencrypt.org/certs/trustid-x3-root.pem.txt")}
 elif [ $TTN_STACK_VERSION -eq 3 ]; then
 	TTN_REGION=${TTN_REGION:-"eu1"}
 	TC_URI=${TC_URI:-"wss://${TTN_REGION}.cloud.thethings.network:8887"} 
-	TC_TRUST=${TC_TRUST:-$(curl --silent "https://letsencrypt.org/certs/{trustid-x3-root.pem.txt,isrgrootx1.pem}")}
 else
     echo -e "\033[91mERROR: Wrong TTN_STACK_VERSION value, should be either 2 o 3.\033[0m"
 	balena-idle
 fi
+
+# Get certificate
+TC_TRUST=${TC_TRUST:-$(curl --silent "https://letsencrypt.org/certs/{trustid-x3-root.pem.txt,isrgrootx1.pem}")}
 
 # Check configuration
 if [ "$TC_URI" == "" ] || [ "$TC_TRUST" == "" ]
@@ -21,9 +22,6 @@ then
 fi
 
 echo "Server: $TC_URI"
-
-# Sanitize TC_TRUST
-#TC_TRUST=$(echo $TC_TRUST | sed 's/-----BEGIN CERTIFICATE-----/-----BEGIN CERTIFICATE-----\n/' | sed 's/-----END CERTIFICATE-----/\n-----END CERTIFICATE-----/' | sed 's/\n\n/\n/g')
 
 # declare map of hardware pins to GPIO on Raspberry Pi
 declare -a pinToGPIO
