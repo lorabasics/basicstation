@@ -1,11 +1,11 @@
-# LoRa Basics™ Station using balena.io with sx1301 and sx1302 LoRa concentrators
+# LoRa Basics™ Station using balena.io with sx1301, sx1302 and sx1303 LoRa concentrators
 
-This project deploys a LoRaWAN gateway with Basics™ Station Packet Forward protocol with balena. It runs on a Raspberry Pi (3/4) or balenaFin with sx1301 and sx1302 LoRa concentrators (e.g. RAK833, RAK2245, RAK2287 and IMST iC880a among others).
+This project deploys a LoRaWAN gateway with Basics™ Station Packet Forward protocol with balena. It runs on a Raspberry Pi (3/4) or balenaFin with sx1301, sx1302 and sx1303 LoRa concentrators (e.g. RAK833, RAK2245, RAK2287, RAK 5146 and IMST iC880a among others).
 
 
 ## Introduction
 
-Deploy a The Things Stack (TTS v3) LoRaWAN gateway running the Basics™ Station Semtech Packet Forward protocol. We are using balena.io and RAK to reduce fricition for the LoRa gateway fleet owners. This project has been tested with The Things Network (TTN v2) and The Things Industries (TTI) as well.
+Deploy a The Things Stack (TTS v3) LoRaWAN gateway running the Basics™ Station Semtech Packet Forward protocol. We are using balena.io and RAK to reduce fricition for the LoRa gateway fleet owners. This project has been tested with The Things Network (TTN v2), The Things Stack (TTS v3) and The Things Industries (TTI) as well.
 
 The Basics™ Station protocol enables the LoRa gateways with a reliable and secure communication between the gateways and the cloud and it is becoming the standard Packet Forward protocol used by most of the LoRaWAN operators.
 
