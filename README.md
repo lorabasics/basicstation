@@ -27,6 +27,9 @@ The Basics™ Station protocol enables the LoRa gateways with a reliable and sec
 * SX1302
 > * [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module) with [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
 
+* SX1303
+> * [RAK 5146](https://store.rakwireless.com/products/wislink-lpwan-concentrator-rak5146) with RAK2287 Pi Hat.
+
 
 ### Software
 
@@ -62,7 +65,7 @@ If you are a balena CLI expert, feel free to use balena CLI.
 
 ### Define your MODEL
 
-The model is defined depending on the version of the concentrator: ```SX1301``` or ```SX1302```. 
+The model is defined depending on the version of the LoRa concentrator: ```SX1301```, ```SX1302``` and ```SX1303```. 
 
 In case that your LoRa concentrator is a ```RAK2287``` it is using ```SX1302```. If the concentrator is the ```RAK2245``` or ```iC880a``` it uses the ```SX1301```. It's important to change the balenaCloud Device Variable with the correct ```MODEL```. The default ```MODEL``` on the balena Application is the ```SX1301```.
 
@@ -75,7 +78,7 @@ That enables a fleet of LoRa gateways with both (e.g.) ```RAK2245``` and ```RAK2
 
 From now it's important to facilitate the ```TTN_STACK_VERSION``` that you are going to use: ```3``` (The Things Stack v3) or ```2``` (The Things Network or TTN V2). The default variable is set into ```3```(V3).
 
-Before starting, also check the ```TTN_REGION```. It needs to be changed if your region is not Europe. In case you use version 3, the European version is ```eu1```. Check [here](https://www.thethingsnetwork.org/docs/lorawan/frequencies-by-country.html) the LoRa frequencies by country.
+Before starting, also check the ```TTN_REGION```. It needs to be changed if your region is not Europe. In case you use version 3, the European version is ```eu1``` by default. Check [here](https://www.thethingsnetwork.org/docs/lorawan/frequencies-by-country.html) the LoRa frequencies by country.
 
 With these variables ```TTN_REGION``` and ```TTN_STACK_VERSION``` the ```TC_URI``` will be generated automatically. In case that you want to point to another specific ```TC_URI```, feel free to add this Device Variable on the balenaCloud.
 
@@ -152,7 +155,7 @@ Variable Name | Value | Description | Default
 **`TC_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
 
 
-#### The Things Network (TTNv2) Specific Variables (V2)
+#### (Deprecated) The Things Network (TTNv2) Specific Variables (V2)
 
 Remember to copy the The Things Network gateway KEY and ID to configure your board variables on balenaCloud.
 
