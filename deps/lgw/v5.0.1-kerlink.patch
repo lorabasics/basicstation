@@ -125,7 +125,8 @@ index c01ed1c..0e2b64c 100644
 @@ -54,7 +54,7 @@ Maintainer: Sylvain Miermont
  #define READ_ACCESS     0x00
  #define WRITE_ACCESS    0x80
- #define SPI_SPEED       8000000
+-#define SPI_SPEED       8000000
++#define SPI_SPEED       (getenv("SPI_SPEED")==NULL ? 8000000 : getenv("SPI_SPEED"))
 -#define SPI_DEV_PATH    "/dev/spidev0.0"
 +#define SPI_DEV_PATH    (getenv("LORAGW_SPI")==NULL ? "/dev/spidev0.0" : getenv("LORAGW_SPI"))
  //#define SPI_DEV_PATH    "/dev/spidev32766.0"
