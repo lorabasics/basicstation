@@ -186,7 +186,7 @@ Initial state: one of more devices connected to TTNv2 stack (The Things Network)
 Proposed procedure:
 
 1. Create the gateways at TTS using the very same Gateway ID (Gateway EUI)
-2. Create a `TC_KEY` variable on each device sith the TTN Gateway Key pasted from the TTI console.
+2. Create a `TC_KEY` variable on each device with the TTN Gateway Key pasted from the TTI console.
 3. Set the `TTN_STACK_VERSION` variable to 3, either at application level or per device
 
 Now you can move them from TTS to TTNv2 back and forth (using the `TTN_STACK_VERSION` variable) as you wish as long as the gateways are defined on both platforms and the `TC_KEY` and `GW_KEY` do not change.
