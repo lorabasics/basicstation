@@ -1,166 +1,199 @@
-[![Build Status](https://travis-ci.com/lorabasics/basicstation.svg?branch=master)](https://travis-ci.com/lorabasics/basicstation)
+# LoRa Basics™ Station using balena.io with sx1301, sx1302 and sx1303 LoRa concentrators
 
-# LoRa Basics™ Station
-
-[Basic Station](https://doc.sm.tc/station) is a LoRaWAN Gateway implementation, including features like
-
-*  **Ready for LoRaWAN Classes A, B, and C**
-*  **Unified Radio Abstraction Layer supporting Concentrator Reference Designs [v1.5](https://doc.sm.tc/station/gw_v1.5.html), [v2](https://doc.sm.tc/station/gw_v2.html) and [Corecell](https://doc.sm.tc/station/gw_corecell.html)**
-
-*  **Powerful Backend Protocols** (read [here](https://doc.sm.tc/station/tcproto.html) and [here](https://doc.sm.tc/station/cupsproto.html))
-    -  Centralized update and configuration management
-    -  Centralized channel-plan management
-    -  Centralized time synchronization and transfer
-    -  Various authentication schemes (client certificate, auth tokens)
-    -  Remote interactive shell
-
-*  **Lean Design**
-    -  No external software dependencies (except mbedTLS and libloragw/-v2)
-    -  Portable C code, no C++, dependent only on GNU libc
-    -  Easily portable to Linux-based gateways and embedded systems
-    -  No dependency on local time keeping
-    -  No need for incoming connections
-
-## Documentation
-
-The full documentation is available at [https://doc.sm.tc/station](https://doc.sm.tc/station).
-
-### High Level Architecture
-
-![High Level Station Architecture](https://doc.sm.tc/station/_images/architecture.png)
-
-## Prerequisites
-
-Building the Station binary from source, requires
-
-* gcc (C11 with GNU extensions)
-* GNU make
-* git
-* bash
-
-## First Steps
-
-The following is a three-step quick start guide on how to build and run Station. It uses a Raspberry Pi as host platform and assumes a Concentrator Reference Design 1.5 compatible radio board connected via SPI. In this example the build process is done on the target platform itself (the make environment also supports cross compilation in which case the toolchain is expected in `~/toolchain-$platform` - see [setup.gmk](setup.gmk)).
-
-#### Step 1: Cloning the Station Repository
-
-``` sourceCode
-git clone https://github.com/lorabasics/basicstation.git
-```
-
-#### Step 2: Compiling the Station Binary
-
-``` sourceCode
-cd basicstation
-make platform=rpi variant=std
-```
-
-The build process consists of the following steps:
-
-*  Fetch and build dependencies, namely [mbedTLS](https://github.com/ARMmbed/mbedtls) and [libloragw](https://github.com/Lora-net/lora_gateway)
-*  Setup build environment within subdirectory `build-$platform-$variant/`
-*  Compile station source files into executable `build-$platform-$variant/bin/station`
-
-#### Step 3: Running the Example Configuration on a Raspberry Pi
-
-``` sourceCode
-cd examples/live-s2.sm.tc
-RADIODEV=/dev/spidev0.0 ../../build-rpi-std/bin/station
-```
-
-**Note:** The SPI device for the radio MAY be passed as an environment variable using `RADIODEV`.
-
-The example configuration connects to a public test server [s2.sm.tc](wss://s2.sm.tc) through which Station fetches all required credentials and a channel plan matching the region as determined from the IP address of the gateway. Provided there are active LoRa devices in proximity, received LoRa frames are printed in the log output on `stderr`.
-
-## Instruction for Supported Platfroms
-
-#### Corecell Platform (Raspberry Pi as HOST + [SX1302CxxxxGW Concentrator](https://www.semtech.com/products/wireless-rf/lora-gateways/sx1302cxxxgw1))
-
-##### Compile and Running the Example
-
-``` sourceCode
-cd basicstation
-make platform=corecell variant=std
-cd examples/corecell
-./start-station.sh -l ./lns-ttn
-```
-
-This example configuration for Corecell connects to [The Things Network](https://www.thethingsnetwork.org/) public LNS. The example [station.conf](station.conf) file holds the required radio configurations and station fetches the channel plan from the configured LNS url ([tc.uri](tc.uri)).
-
-#### PicoCell Gateway (Linux OS as HOST + [SX1308 USB Reference design](https://www.semtech.com/products/wireless-rf/lora-gateways/sx1308p868gw))
+This project deploys a LoRaWAN gateway with Basics™ Station Packet Forward protocol with balena. It runs on a Raspberry Pi (3/4) or balenaFin with sx1301, sx1302 and sx1303 LoRa concentrators (e.g. RAK833, RAK2245, RAK2287, RAK 5146 and IMST iC880a among others).
 
 
-##### Compile and Running the Example
+## Introduction
 
-``` sourceCode
-cd basicstation
-make platform=linuxpico variant=std
-cd examples/live-s2.sm.tc
-RADIODEV=/dev/ttyACM0 ../../build-linuxpico-std/bin/station
-```
+Deploy a The Things Stack (TTS v3) LoRaWAN gateway running the Basics™ Station Semtech Packet Forward protocol. We are using balena.io and RAK to reduce fricition for the LoRa gateway fleet owners. This project has been tested with The Things Network (TTN v2), The Things Stack (TTS v3) and The Things Industries (TTI) as well.
 
-**Note:** The serial device for the PicoCell MAY be passed as an environment variable using `RADIODEV`.
+The Basics™ Station protocol enables the LoRa gateways with a reliable and secure communication between the gateways and the cloud and it is becoming the standard Packet Forward protocol used by most of the LoRaWAN operators.
 
-## Next Steps
 
-Next,
+## Getting started
 
-*  consult the help menu of Station via `station --help`,
-*  inspect the `station.conf` and `cups-boot.*` [example configuration files](/examples/live-s2.sm.tc),
-*  tune your local [configuration](https://doc.sm.tc/station/conf.html),
-*  learn how to [compile Station](https://doc.sm.tc/station/compile.html) for your target platform.
+### Hardware
 
-Check out the other examples:
+* Raspberry Pi 3/4 or [balenaFin](https://www.balena.io/fin/)
+* SD card in case of the RPi 4
 
-*  [Simulation Example](/examples/simulation) - An introduction to the simulation environment.
-*  [CUPS Example](/examples/cups) - Demonstration of the CUPS protocol within the simulation environment.
-*  [Station to Pkfwd Protocol Bridge Example](/examples/station2pkfwd) - Connect Basic Station to LNS supporting the legacy protocol.
+#### LoRa Concentrators
 
-## Usage
+* SX1301 
+> * [IMST iC880a](https://shop.imst.de/wireless-modules/lora-products/8/ic880a-spi-lorawan-concentrator-868-mhz)
+> * [RAK 2245 pi hat](https://store.rakwireless.com/products/rak2245-pi-hat)
+> * RAK833
 
-The Station binary accepts the following command-line options:
+* SX1302
+> * [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module) with [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
 
-```
-Usage: station [OPTION...]
+* SX1303
+> * [RAK 5146](https://store.rakwireless.com/products/wislink-lpwan-concentrator-rak5146) with RAK2287 Pi Hat.
 
-  -d, --daemon               First check if another process is still alive. If
-                             so do nothing and exit. Otherwise fork a worker
-                             process to operate the radios and network
-                             protocols. If the subprocess died respawn it with
-                             an appropriate back off.
-  -f, --force                If a station process is already running, kill it
-                             before continuing with requested operation mode.
-  -h, --home=DIR             Home directory for configuration files. Default is
-                             the current working directory. Overrides
-                             environment STATION_DIR.
-  -i, --radio-init=cmd       Program/script to run before reinitializing radio
-                             hardware. By default nothing is being executed.
-                             Overrides environment STATION_RADIOINIT.
-  -k, --kill                 Kill a currently running station process.
-  -l, --log-level=LVL|0..7   Set a log level LVL=#loglvls# or use a numeric
-                             value. Overrides environment STATION_LOGLEVEL.
-  -L, --log-file=FILE[,SIZE[,ROT]]
-                             Write log entries to FILE. If FILE is '-' then
-                             write to stderr. Optionally followed by a max file
-                             SIZE and a number of rotation files. If ROT is 0
-                             then keep only FILE. If ROT is 1 then keep one
-                             more old log file around. Overrides environment
-                             STATION_LOGFILE.
-  -N, --no-tc                Do not connect to a LNS. Only run CUPS
-                             functionality.
-  -p, --params               Print current parameter settings.
-  -t, --temp=DIR             Temp directory for frequently written files.
-                             Default is /tmp. Overrides environment
-                             STATION_TEMPDIR.
-  -x, --eui-prefix=id6       Turn MAC address into EUI by adding this prefix.
-                             If the argument has value ff:fe00:0 then the EUI
-                             is formed by inserting FFFE in the middle. If
-                             absent use MAC or routerid as is. Overrides
-                             environment STATION_EUIPREFIX.
-  -?, --help                 Give this help list
-      --usage                Give a short usage message
-  -v, --version              Print station version.
 
-Mandatory or optional arguments to long options are also mandatory or optional
-for any corresponding short options.
-```
+### Software
+
+* A The Things Stack V3 account [here](https://ttc.eu1.cloud.thethings.industries/console/)
+* A balenaCloud account ([sign up here](https://dashboard.balena-cloud.com/))
+* [balenaEtcher](https://balena.io/etcher)
+
+Once all of this is ready, you are able to deploy this repository following instructions below.
+
+## Deploy the code
+
+### Via [Balena Deploy](https://www.balena.io/docs/learn/deploy/deploy-with-balena-button/)
+
+Running this project is as simple as deploying it to a balenaCloud application. You can do it in just one click by using the button below:
+
+[![](https://www.balena.io/deploy.png)](https://dashboard.balena-cloud.com/deploy?repoUrl=https://github.com/balenalabs/basicstation)
+
+Follow instructions, click Add a Device and flash an SD card with that OS image dowloaded from balenaCloud. Enjoy the magic 🌟Over-The-Air🌟!
+
+
+### Via [Balena-Cli](https://www.balena.io/docs/reference/balena-cli/)
+
+If you are a balena CLI expert, feel free to use balena CLI.
+
+- Sign up on [balena.io](https://dashboard.balena.io/signup)
+- Create a new application on balenaCloud.
+- Clone this repository to your local workspace.
+- Using [Balena CLI](https://www.balena.io/docs/reference/cli/), push the code with `balena push <application-name>`
+- See the magic happening, your device is getting updated 🌟Over-The-Air🌟!
+
+
+## Configure the Gateway
+
+### Define your MODEL
+
+The model is defined depending on the version of the LoRa concentrator: ```SX1301```, ```SX1302``` and ```SX1303```. 
+
+In case that your LoRa concentrator is a ```RAK2287``` it is using ```SX1302```. If the concentrator is the ```RAK2245``` or ```iC880a``` it uses the ```SX1301```. It's important to change the balenaCloud Device Variable with the correct ```MODEL```. The default ```MODEL``` on the balena Application is the ```SX1301```.
+
+1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
+2. Click "Device Variables" button on the left menu and change the ```MODEL``` variable to ```SX1302``` if needed.
+
+That enables a fleet of LoRa gateways with both (e.g.) ```RAK2245``` and ```RAK2287``` together under the same app.
+
+### Define your REGION and TTN STACK VERSION
+
+From now it's important to facilitate the ```TTN_STACK_VERSION``` that you are going to use: ```3``` (The Things Stack v3) or ```2``` (The Things Network or TTN V2). The default variable is set into ```3```(V3).
+
+Before starting, also check the ```TTN_REGION```. It needs to be changed if your region is not Europe. In case you use version 3, the European version is ```eu1``` by default. Check [here](https://www.thethingsnetwork.org/docs/lorawan/frequencies-by-country.html) the LoRa frequencies by country.
+
+With these variables ```TTN_REGION``` and ```TTN_STACK_VERSION``` the ```TC_URI``` will be generated automatically. In case that you want to point to another specific ```TC_URI```, feel free to add this Device Variable on the balenaCloud.
+
+### Get the EUI of the LoRa Gateway
+
+The LoRa gateways are manufactured with a unique 64 bits (8 bytes) identifier, called EUI, which can be used to register the gateway on The Things Network and The Things Stack. To get the EUI from your board it’s important to know the Ethernet MAC address of it (this is not going to work if your device does not have Ethernet port). 
+
+The ```EUI``` will be the Ethernet mac address (6 bytes), which is unique, expanded with 2 more bytes (FFFE). This is a standard way to increment the MAC address from 6 to 8 bytes.
+
+To get the ```EUI```, copy the TAG of the device which will be generated automatically when the device gets provisioned on balenaCloud for first time. Be careful when you copy the tag, as other characters will be copied.
+
+If that does not work, go to the terminal box and click "Select a target", then “HostOS”. Once you are inside the shell, type:
+
+```cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1fffe\2#g' ```
+
+Copy the result and you are ready to register your gateway with this EUI.
+
+
+### Configure your The Things Stack gateway (V3)
+
+1. Sign up at [The Things Stack console](https://ttc.eu1.cloud.thethings.industries/console/).
+2. Click "Go to Gateways" icon.
+3. Click the "Add gateway" button.
+4. Introduce the data for the gateway.
+5. Paste the EUI from the balenaCloud tags.
+6. Complete the form and click Register gateway.
+7. Once the gateway is created, click "API keys" link.
+8. Click "Add API key" button.
+9. Select "Grant individual rights" and then "Link as Gateway to a Gateway Server for traffic exchange ..." and then click "Create API key".
+10. Copy the API key generated. and bring it to balenaCloud as ```TC_KEY```.
+
+### Configure your The Things Network gateway (V2)
+
+1. Sign up at [The Things Network console](https://console.thethingsnetwork.org/).
+2. Click Gateways button.
+3. Click the "Register gateway" link.
+4. Check “I’m using the legacy packet forwarder” checkbox.
+5. Paste the EUI from the balenaCloud tag or the Ethernet mac address of the board (calculated above)
+6. Complete the form and click Register gateway.
+7. Copy the Key generated on the gateway page.
+
+
+### Balena LoRa Basics Station Service Variables
+
+Once successfully registered:
+
+1. Go to balenaCloud dashboard and get into your LoRa gateway device site.
+2. Click "Device Variables" button on the left menu and add these variables.
+
+Alternativelly, you can also set any of them at application level if you want it to apply to all devices in you application.
+
+
+#### Common Variables
+
+Variable Name | Value | Description | Default
+------------ | ------------- | ------------- | -------------
+**`GW_GPS`** | `STRING` | Enables GPS | true or false
+**`GW_RESET_PIN`** | `INT` | Pin number that resets (Raspberry Pi header number) | 11
+**`GW_RESET_GPIO`** | `INT` | GPIO number that resets (Broadcom pin number, if not defined, it's calculated based on the GW_RESET_PIN) | 17
+**`TTN_STACK_VERSION`** | `INT` | If using TTN, version of the stack. It can be either 2 (TTNv2) or 3 (TTS) | 3
+**`TTN_REGION`** | `STRING` | Region of the TTN server to use | ```eu1``` (when using TTN v2 use ```eu```)
+**`TC_TRUST`** | `STRING` | Certificate for the server | Automatically retrieved from LetsEncryt based on the `TTN_STACK_VERSION` value
+**`MODEL`** | `STRING` | ```SX1301``` or ```SX1302``` | ```SX1301```
+**`TC_URI`** | `STRING` | basics station TC URI to get connected.  | 
+
+#### The Things Stack (TTS) Specific Variables (V3)
+
+Remember to generate an API Key and copy it. It will be the ```TC_KEY```.
+
+The `TC_URI` and `TC_TRUST` values are automatically populated to use ```wss://eu1.cloud.thethings.network:8887``` if you set `TTN_STACK_VERSION` to 3.If your region is not EU you can set it using ```TTN_REGION```. At the moment there is only one server avalable is ```eu1```.
+
+Variable Name | Value | Description | Default
+------------ | ------------- | ------------- | -------------
+**`TC_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
+
+
+#### (Deprecated) The Things Network (TTNv2) Specific Variables (V2)
+
+Remember to copy the The Things Network gateway KEY and ID to configure your board variables on balenaCloud.
+
+The `GW_ID`and `GW_KEY` variables have been generated automatically when the Application has been created with the Deploy with Balena button. Replace the values with the KEY and ID from the TTN console.
+
+The `TC_URI` and `TC_TRUST` values are automatically populated to use ```wss://lns.eu.thethings.network:443``` if you set `TTN_STACK_VERSION` to 2. If your region is not EU you can set it using ```TTN_REGION```, Possible values are ```eu```, ```us```, ```in``` and ```au```.
+
+Variable Name | Value | Description | Default
+------------ | ------------- | ------------- | -------------
+**`GW_ID`** | `STRING` | TTN Gateway EUI | (EUI)
+**`GW_KEY`** | `STRING` | Unique TTN Gateway Key | (Key pasted from TTN console)
+
+
+At this moment your LoRaWAN gateway should be up and running. Check on the TTN or TTS console if it shows the connected status.
+
+
+## Troubleshoothing
+
+It's possible that on the TTN Console the gateway appears as Not connected if it's not receiving any LoRa message. Sometimes the websockets connection among the LoRa Gateway and the server can get broken. However a new LoRa package will re-open the websocket between the Gateway and TTN or TTI. This issue should be solved with the TTN v3.
+
+Feel free to introduce issues on this repo and contribute with solutions.
+
+
+## TTNv2 to TTS migration
+
+Initial state: one of more devices connected to TTNv2 stack (The Things Network).
+
+Proposed procedure:
+
+1. Create the gateways at TTS using the very same Gateway ID (Gateway EUI)
+2. Create a `TC_KEY` variable on each device with the TTN Gateway Key pasted from the TTI console.
+3. Set the `TTN_STACK_VERSION` variable to 3, either at application level or per device
+
+Now you can move them from TTS to TTNv2 back and forth (using the `TTN_STACK_VERSION` variable) as you wish as long as the gateways are defined on both platforms and the `TC_KEY` and `GW_KEY` do not change.
+
+
+## Attribution
+
+- This is an adaptation of the [Semtech Basics Station repository](https://github.com/lorabasics/basicstation). Documentation [here](https://doc.sm.tc/station).
+- This is in part working thanks of the work of Jose Marcelino from RAK Wireless, Xose Pérez from Allwize and Marc Pous from balena.io.
+- This is in part based on excellent work done by Rahul Thakoor from the Balena.io Hardware Hackers team.

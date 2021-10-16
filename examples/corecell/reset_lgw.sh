@@ -11,8 +11,8 @@
 # GPIO mapping has to be adapted with HW
 #
 
-SX1302_RESET_PIN=23
-SX1302_POWER_EN_PIN=18
+SX1302_RESET_PIN=${GW_RESET_GPIO:-17}
+SX1302_POWER_EN_PIN=${GW_POWER_EN_GPIO:-18}
 
 WAIT_GPIO() {
     sleep 0.1
@@ -29,8 +29,8 @@ init() {
 }
 
 reset() {
-    echo "CoreCell reset through GPIO$SX1302_RESET_PIN..."
-    echo "CoreCell power enable through GPIO$SX1302_POWER_EN_PIN..."
+    echo "RAK2287 reset through GPIO$SX1302_RESET_PIN..."
+    echo "RAK2287 power enable through GPIO$SX1302_POWER_EN_PIN..."
 
     # write output for SX1302 CoreCell power_enable and reset
     echo "1" > /sys/class/gpio/gpio$SX1302_POWER_EN_PIN/value; WAIT_GPIO

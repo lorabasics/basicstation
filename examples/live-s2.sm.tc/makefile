@@ -39,6 +39,6 @@ kerlink:
 	platform=kerlink variant=std make
 
 clean:
-	rm -rf cups.* cups-bak.* tc.* tc-bak.* station.log station.pid
+	rm -rf cups.* cups-bak.* tc-bak.* station.log station.pid
 
 .PHONY: all clean

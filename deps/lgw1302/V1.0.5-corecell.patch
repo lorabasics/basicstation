@@ -298,3 +298,393 @@ index 77c3d4d..487283f 100644
  /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
  
  int timestamp_counter_mode(bool enable_precision_ts, uint8_t max_ts_metrics, uint8_t nb_symbols) {
+diff --git a/libloragw/Makefile b/libloragw/Makefile
+index 262167a..439b23a 100644
+--- a/libloragw/Makefile
++++ b/libloragw/Makefile
+@@ -85,7 +85,7 @@ $(OBJDIR)/%.o: src/%.c $(INCLUDES) inc/config.h | $(OBJDIR)
+ 
+ ### static library
+ 
+-libloragw.a: $(OBJDIR)/loragw_spi.o $(OBJDIR)/loragw_i2c.o $(OBJDIR)/loragw_aux.o $(OBJDIR)/loragw_reg.o $(OBJDIR)/loragw_sx1250.o $(OBJDIR)/loragw_sx125x.o $(OBJDIR)/loragw_sx1302.o $(OBJDIR)/loragw_cal.o $(OBJDIR)/loragw_debug.o $(OBJDIR)/loragw_hal.o $(OBJDIR)/loragw_stts751.o $(OBJDIR)/loragw_gps.o $(OBJDIR)/loragw_sx1302_timestamp.o $(OBJDIR)/loragw_sx1302_rx.o
++libloragw.a: $(OBJDIR)/loragw_spi.o $(OBJDIR)/loragw_i2c.o $(OBJDIR)/loragw_aux.o $(OBJDIR)/loragw_reg.o $(OBJDIR)/loragw_sx1250.o $(OBJDIR)/loragw_sx125x.o $(OBJDIR)/loragw_sx1302.o $(OBJDIR)/loragw_cal.o $(OBJDIR)/loragw_debug.o $(OBJDIR)/loragw_hal.o $(OBJDIR)/loragw_gps.o $(OBJDIR)/loragw_sx1302_timestamp.o $(OBJDIR)/loragw_sx1302_rx.o
+ 	$(AR) rcs $@ $^
+ 
+ ### test programs
+diff --git a/libloragw/inc/loragw_stts751.h b/libloragw/inc/loragw_stts751.h
+deleted file mode 100644
+index b1a898a..0000000
+--- a/libloragw/inc/loragw_stts751.h
++++ /dev/null
+@@ -1,58 +0,0 @@
+-/*
+- / _____)             _              | |
+-( (____  _____ ____ _| |_ _____  ____| |__
+- \____ \| ___ |    (_   _) ___ |/ ___)  _ \
+- _____) ) ____| | | || |_| ____( (___| | | |
+-(______/|_____)_|_|_| \__)_____)\____)_| |_|
+-  (C)2019 Semtech
+-
+-Description:
+-    Basic driver for ST ts751 temperature sensor
+-
+-License: Revised BSD License, see LICENSE.TXT file include in the project
+-*/
+-
+-
+-#ifndef _LORAGW_STTS751_H
+-#define _LORAGW_STTS751_H
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- DEPENDANCIES --------------------------------------------------------- */
+-
+-#include <stdint.h>     /* C99 types */
+-#include <stdbool.h>    /* bool type */
+-
+-#include "config.h"     /* library configuration options (dynamically generated) */
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- INTERNAL SHARED TYPES ------------------------------------------------ */
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- INTERNAL SHARED FUNCTIONS -------------------------------------------- */
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- PUBLIC CONSTANTS ----------------------------------------------------- */
+-
+-#define I2C_PORT_TEMP_SENSOR_0    0x39  /* STTS751-0DP3F */
+-#define I2C_PORT_TEMP_SENSOR_1    0x3B  /* STTS751-1DP3F */
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- PUBLIC FUNCTIONS ----------------------------------------------------- */
+-
+-/**
+-@brief TODO
+-@param TODO
+-@return TODO
+-*/
+-int stts751_configure(int i2c_fd, uint8_t i2c_addr);
+-
+-/**
+-@brief TODO
+-@param TODO
+-@return TODO
+-*/
+-int stts751_get_temperature(int i2c_fd, uint8_t i2c_addr, float * temperature);
+-
+-#endif
+-
+-/* --- EOF ------------------------------------------------------------------ */
+diff --git a/libloragw/src/loragw_hal.c b/libloragw/src/loragw_hal.c
+index 3b00c09..66d5c97 100644
+--- a/libloragw/src/loragw_hal.c
++++ b/libloragw/src/loragw_hal.c
+@@ -41,7 +41,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
+ #include "loragw_sx1250.h"
+ #include "loragw_sx125x.h"
+ #include "loragw_sx1302.h"
+-#include "loragw_stts751.h"
++
+ #include "loragw_debug.h"
+ 
+ /* -------------------------------------------------------------------------- */
+@@ -181,8 +181,8 @@ static lgw_context_t lgw_context = {
+ FILE * log_file = NULL;
+ 
+ /* I2C temperature sensor handles */
+-static int     ts_fd = -1;
+-static uint8_t ts_addr = 0xFF;
++//static int     ts_fd = -1;
++//static uint8_t ts_addr = 0xFF;
+ 
+ /* -------------------------------------------------------------------------- */
+ /* --- PRIVATE FUNCTIONS DECLARATION ---------------------------------------- */
+@@ -719,22 +719,23 @@ int lgw_start(void) {
+     dbg_init_gpio();
+ #endif
+ 
++//
+     /* Try to configure temperature sensor STTS751-0DP3F */
+-    ts_addr = I2C_PORT_TEMP_SENSOR_0;
+-    i2c_linuxdev_open(I2C_DEVICE, ts_addr, &ts_fd);
+-    err = stts751_configure(ts_fd, ts_addr);
+-    if (err != LGW_I2C_SUCCESS) {
+-        i2c_linuxdev_close(ts_fd);
+-        ts_fd = -1;
+-        /* Not found, try to configure temperature sensor STTS751-1DP3F */
+-        ts_addr = I2C_PORT_TEMP_SENSOR_1;
+-        i2c_linuxdev_open(I2C_DEVICE, ts_addr, &ts_fd);
+-        err = stts751_configure(ts_fd, ts_addr);
+-        if (err != LGW_I2C_SUCCESS) {
+-            printf("ERROR: failed to configure the temperature sensor\n");
+-            return LGW_HAL_ERROR;
+-        }
+-    }
++//    ts_addr = I2C_PORT_TEMP_SENSOR_0;
++//    i2c_linuxdev_open(I2C_DEVICE, ts_addr, &ts_fd);
++//    err = stts751_configure(ts_fd, ts_addr);
++//    if (err != LGW_I2C_SUCCESS) {
++//        i2c_linuxdev_close(ts_fd);
++//        ts_fd = -1;
++//        /* Not found, try to configure temperature sensor STTS751-1DP3F */
++//        ts_addr = I2C_PORT_TEMP_SENSOR_1;
++//        i2c_linuxdev_open(I2C_DEVICE, ts_addr, &ts_fd);
++//        err = stts751_configure(ts_fd, ts_addr);
++//        if (err != LGW_I2C_SUCCESS) {
++//            printf("ERROR: failed to configure the temperature sensor\n");
++//            return LGW_HAL_ERROR;
++//        }
++//    }
+ 
+     /* set hal state */
+     CONTEXT_STARTED = true;
+@@ -762,10 +763,10 @@ int lgw_stop(void) {
+     lgw_disconnect();
+ 
+     DEBUG_MSG("INFO: Closing I2C\n");
+-    err = i2c_linuxdev_close(ts_fd);
+-    if (err != 0) {
+-        printf("ERROR: failed to close I2C device (err=%i)\n", err);
+-    }
++    //err = i2c_linuxdev_close(ts_fd);
++    //if (err != 0) {
++    //    printf("ERROR: failed to close I2C device (err=%i)\n", err);
++    //}
+ 
+     CONTEXT_STARTED = false;
+     return LGW_HAL_SUCCESS;
+@@ -778,7 +779,9 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
+     uint8_t  nb_pkt_fetched = 0;
+     uint16_t nb_pkt_found = 0;
+     uint16_t nb_pkt_left = 0;
+-    float current_temperature, rssi_temperature_offset;
++    //float current_temperature, rssi_temperature_offset;
++	float current_temperature = 30.0;
++    float rssi_temperature_offset;
+ 
+     /* Check that AGC/ARB firmwares are not corrupted, and update internal counter */
+     /* WARNING: this needs to be called regularly by the upper layer */
+@@ -802,11 +805,11 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
+     }
+ 
+     /* Apply RSSI temperature compensation */
+-    res = stts751_get_temperature(ts_fd, ts_addr, &current_temperature);
+-    if (res != LGW_I2C_SUCCESS) {
+-        printf("ERROR: failed to get current temperature\n");
+-        return LGW_HAL_ERROR;
+-    }
++    //res = stts751_get_temperature(ts_fd, ts_addr, &current_temperature);
++    //if (res != LGW_I2C_SUCCESS) {
++    //    printf("ERROR: failed to get current temperature\n");
++    //    return LGW_HAL_ERROR;
++    //}
+ 
+     /* Iterate on the RX buffer to get parsed packets */
+     for (nb_pkt_found = 0; nb_pkt_found < ((nb_pkt_fetched <= max_pkt) ? nb_pkt_fetched : max_pkt); nb_pkt_found++) {
+@@ -982,10 +985,10 @@ int lgw_get_eui(uint64_t* eui) {
+ 
+ int lgw_get_temperature(float* temperature) {
+     CHECK_NULL(temperature);
+-
+-    if (stts751_get_temperature(ts_fd, ts_addr, temperature) != LGW_I2C_SUCCESS) {
+-        return LGW_HAL_ERROR;
+-    }
++    *temperature = 30.0;
++    //if (stts751_get_temperature(ts_fd, ts_addr, temperature) != LGW_I2C_SUCCESS) {
++    //    return LGW_HAL_ERROR;
++    //}
+ 
+     return LGW_HAL_SUCCESS;
+ }
+diff --git a/libloragw/src/loragw_stts751.c b/libloragw/src/loragw_stts751.c
+deleted file mode 100644
+index c417dc2..0000000
+--- a/libloragw/src/loragw_stts751.c
++++ /dev/null
+@@ -1,186 +0,0 @@
+-/*
+- / _____)             _              | |
+-( (____  _____ ____ _| |_ _____  ____| |__
+- \____ \| ___ |    (_   _) ___ |/ ___)  _ \
+- _____) ) ____| | | || |_| ____( (___| | | |
+-(______/|_____)_|_|_| \__)_____)\____)_| |_|
+-  (C)2019 Semtech
+-
+-Description:
+-    Basic driver for ST ts751 temperature sensor
+-
+-License: Revised BSD License, see LICENSE.TXT file include in the project
+-*/
+-
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- DEPENDANCIES --------------------------------------------------------- */
+-
+-#include <stdint.h>     /* C99 types */
+-#include <stdbool.h>    /* bool type */
+-#include <stdio.h>      /* printf fprintf */
+-
+-#include "loragw_i2c.h"
+-#include "loragw_stts751.h"
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- PRIVATE MACROS ------------------------------------------------------- */
+-
+-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+-#if DEBUG_I2C == 1
+-    #define DEBUG_MSG(str)              fprintf(stderr, str)
+-    #define DEBUG_PRINTF(fmt, args...)  fprintf(stderr,"%s:%d: "fmt, __FUNCTION__, __LINE__, args)
+-    #define CHECK_NULL(a)               if(a==NULL){fprintf(stderr,"%s:%d: ERROR: NULL POINTER AS ARGUMENT\n", __FUNCTION__, __LINE__);return LGW_REG_ERROR;}
+-#else
+-    #define DEBUG_MSG(str)
+-    #define DEBUG_PRINTF(fmt, args...)
+-    #define CHECK_NULL(a)               if(a==NULL){return LGW_REG_ERROR;}
+-#endif
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- PRIVATE CONSTANTS ---------------------------------------------------- */
+-
+-#define STTS751_REG_TEMP_H      0x00
+-#define STTS751_REG_STATUS      0x01
+-#define STTS751_STATUS_TRIPT    BIT(0)
+-#define STTS751_STATUS_TRIPL    BIT(5)
+-#define STTS751_STATUS_TRIPH    BIT(6)
+-#define STTS751_REG_TEMP_L      0x02
+-#define STTS751_REG_CONF        0x03
+-#define STTS751_CONF_RES_MASK   0x0C
+-#define STTS751_CONF_RES_SHIFT  2
+-#define STTS751_CONF_EVENT_DIS  BIT(7)
+-#define STTS751_CONF_STOP       BIT(6)
+-#define STTS751_REG_RATE        0x04
+-#define STTS751_REG_HLIM_H      0x05
+-#define STTS751_REG_HLIM_L      0x06
+-#define STTS751_REG_LLIM_H      0x07
+-#define STTS751_REG_LLIM_L      0x08
+-#define STTS751_REG_TLIM        0x20
+-#define STTS751_REG_HYST        0x21
+-#define STTS751_REG_SMBUS_TO    0x22
+-
+-#define STTS751_REG_PROD_ID     0xFD
+-#define STTS751_REG_MAN_ID      0xFE
+-#define STTS751_REG_REV_ID      0xFF
+-
+-#define STTS751_0_PROD_ID       0x00
+-#define STTS751_1_PROD_ID       0x01
+-#define ST_MAN_ID               0x53
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- PRIVATE VARIABLES ---------------------------------------------------- */
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- INTERNAL SHARED VARIABLES -------------------------------------------- */
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- PRIVATE FUNCTIONS ---------------------------------------------------- */
+-
+-/* -------------------------------------------------------------------------- */
+-/* --- PUBLIC FUNCTIONS DEFINITION ------------------------------------------ */
+-
+-int stts751_configure(int i2c_fd, uint8_t i2c_addr) {
+-    int err;
+-    uint8_t val;
+-
+-    /* Check Input Params */
+-    if (i2c_fd <= 0) {
+-        printf("ERROR: invalid I2C file descriptor\n");
+-        return LGW_I2C_ERROR;
+-    }
+-
+-    DEBUG_PRINTF("INFO: configuring STTS751 temperature sensor on 0x%02X...\n", i2c_addr);
+-
+-    /* Get product ID  and test which sensor is mounted */
+-    err = i2c_linuxdev_read(i2c_fd, i2c_addr, STTS751_REG_PROD_ID, &val);
+-    if (err != 0) {
+-        DEBUG_PRINTF("ERROR: failed to read I2C device 0x%02X (err=%i)\n", i2c_addr, err);
+-        return LGW_I2C_ERROR;
+-    }
+-    switch (val) {
+-        case STTS751_0_PROD_ID:
+-            DEBUG_MSG("INFO: Product ID: STTS751-0\n");
+-            break;
+-        case STTS751_1_PROD_ID:
+-            DEBUG_MSG("INFO: Product ID: STTS751-1\n");
+-            break;
+-        default:
+-            printf("ERROR: Product ID: UNKNOWN\n");
+-            return LGW_I2C_ERROR;
+-    }
+-
+-    /* Get Manufacturer ID */
+-    err = i2c_linuxdev_read(i2c_fd, i2c_addr, STTS751_REG_MAN_ID, &val);
+-    if (err != 0) {
+-        DEBUG_PRINTF("ERROR: failed to read I2C device 0x%02X (err=%i)\n", i2c_addr, err);
+-        return LGW_I2C_ERROR;
+-    }
+-    if (val != ST_MAN_ID) {
+-        printf("ERROR: Manufacturer ID: UNKNOWN\n");
+-        return LGW_I2C_ERROR;
+-    } else {
+-        DEBUG_PRINTF("INFO: Manufacturer ID: 0x%02X\n", val);
+-    }
+-
+-    /* Get revision number */
+-    err = i2c_linuxdev_read(i2c_fd, i2c_addr, STTS751_REG_REV_ID, &val);
+-    if (err != 0) {
+-        DEBUG_PRINTF("ERROR: failed to read I2C device 0x%02X (err=%i)\n", i2c_addr, err);
+-        return LGW_I2C_ERROR;
+-    }
+-    DEBUG_PRINTF("INFO: Revision number: 0x%02X\n", val);
+-
+-    /* Set conversion resolution to 12 bits */
+-    err = i2c_linuxdev_write(i2c_fd, i2c_addr, STTS751_REG_CONF, 0x8C); /* TODO: do not hardcode the whole byte */
+-    if (err != 0) {
+-        DEBUG_PRINTF("ERROR: failed to write I2C device 0x%02X (err=%i)\n", i2c_addr, err);
+-        return LGW_I2C_ERROR;
+-    }
+-
+-    /* Set conversion rate to 1 / second */
+-    err = i2c_linuxdev_write(i2c_fd, i2c_addr, STTS751_REG_RATE, 0x04);
+-    if (err != 0) {
+-        DEBUG_PRINTF("ERROR: failed to write I2C device 0x%02X (err=%i)\n", i2c_addr, err);
+-        return LGW_I2C_ERROR;
+-    }
+-
+-    return LGW_I2C_SUCCESS;
+-}
+-
+-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+-
+-int stts751_get_temperature(int i2c_fd, uint8_t i2c_addr, float * temperature) {
+-    int err;
+-    uint8_t high_byte, low_byte;
+-    int8_t h;
+-
+-    /* Check Input Params */
+-    if (i2c_fd <= 0) {
+-        printf("ERROR: invalid I2C file descriptor\n");
+-        return LGW_I2C_ERROR;
+-    }
+-
+-    /* Read Temperature LSB */
+-    err = i2c_linuxdev_read(i2c_fd, i2c_addr, STTS751_REG_TEMP_L, &low_byte);
+-    if (err != 0) {
+-        printf("ERROR: failed to read I2C device 0x%02X (err=%i)\n", i2c_addr, err);
+-        return LGW_I2C_ERROR;
+-    }
+-
+-    /* Read Temperature MSB */
+-    err = i2c_linuxdev_read(i2c_fd, i2c_addr, STTS751_REG_TEMP_H, &high_byte);
+-    if (err != 0) {
+-        printf("ERROR: failed to read I2C device 0x%02X (err=%i)\n", i2c_addr, err);
+-        return LGW_I2C_ERROR;
+-    }
+-
+-    h = (int8_t)high_byte;
+-    *temperature = ((h << 8) | low_byte) / 256.0;
+-
+-    DEBUG_PRINTF("Temperature: %f C (h:0x%02X l:0x%02X)\n", *temperature, high_byte, low_byte);
+-
+-    return LGW_I2C_SUCCESS;
+-}
+-
+-/* --- EOF ------------------------------------------------------------------ */
