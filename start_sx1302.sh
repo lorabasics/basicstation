@@ -15,5 +15,6 @@ fi
 
 # Set other environment variables
 export GW_RESET_GPIO=$GW_RESET_GPIO
+export GW_POWER_EN_GPIO=$GW_POWER_EN_GPIO
 
 ./start-station.sh -l ./lns-ttn
