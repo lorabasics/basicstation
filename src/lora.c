@@ -211,7 +211,7 @@ void s2e_make_beacon (uint8_t* layout, sL_t epoch_secs, int infodesc, double lat
     int crc1 = crc16_no_table(&pdu[0],infodesc_off-2);
     int crc2 = crc16_no_table(&pdu[infodesc_off], bcn_len-2-infodesc_off);
     for( int i=0; i<2; i++ ) {
-        pdu[infodesc_off-2] = crc1>>(8*i);
-        pdu[bcn_len-2]      = crc2>>(8*i);
+        pdu[infodesc_off-2+i] = crc1>>(8*i);
+        pdu[bcn_len-2+i]      = crc2>>(8*i);
     }
 }
