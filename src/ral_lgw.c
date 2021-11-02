@@ -192,10 +192,17 @@ int ral_tx (txjob_t* txjob, s2ctx_t* s2ctx, int nocca) {
     struct lgw_pkt_tx_s pkt_tx;
     memset(&pkt_tx, 0, sizeof(pkt_tx));
 
+    pkt_tx.invert_pol = true;
+    pkt_tx.no_crc     = !txjob->addcrc;
+    pkt_tx.no_header  = false;
+
     if( txjob->preamble == 0 ) {
         if( txjob->txflags & TXFLAG_BCN ) {
             pkt_tx.tx_mode = ON_GPS;
             pkt_tx.preamble = 10;
+            pkt_tx.invert_pol = false;
+            pkt_tx.no_crc = true;
+            pkt_tx.no_header = true;
         } else {
             pkt_tx.tx_mode = TIMESTAMPED;
             pkt_tx.preamble = 8;
@@ -210,9 +217,6 @@ int ral_tx (txjob_t* txjob, s2ctx_t* s2ctx, int nocca) {
     pkt_tx.rf_chain   = 0;
     pkt_tx.rf_power   = (float)(txjob->txpow - txpowAdjust) / TXPOW_SCALE;
     pkt_tx.coderate   = CR_LORA_4_5;
-    pkt_tx.invert_pol = true;
-    pkt_tx.no_crc     = !txjob->addcrc;
-    pkt_tx.no_header  = false;
     pkt_tx.size       = txjob->len;
     memcpy(pkt_tx.payload, &s2ctx->txq.txdata[txjob->off], pkt_tx.size);
 
