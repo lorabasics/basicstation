@@ -19,7 +19,7 @@ assets:
     type: blob.asset
     data:
       url: >-
-        https://raw.githubusercontent.com/balenalabs/basicstation/master/logo.png
+        https://raw.githubusercontent.com/balenalabs/basicstation/master/balenacloud.png
 data:
   applicationEnvironmentVariables:
     - GW_GPS: false
