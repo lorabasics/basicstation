@@ -1,6 +1,6 @@
 # LoRa Basics™ Station using balena.io with sx1301, sx1302 and sx1303 LoRa concentrators
 
-This project deploys a LoRaWAN gateway with Basics™ Station Packet Forward protocol with balena. It runs on a Raspberry Pi (3/4) or balenaFin with sx1301, sx1302 and sx1303 LoRa concentrators (e.g. RAK833, RAK2245, RAK2287, RAK 5146 and IMST iC880a among others).
+This project deploys a LoRaWAN gateway with Basics™ Station Packet Forward protocol with balena. It runs on a Raspberry Pi (3/4) or balenaFin with sx1301, sx1302 and sx1303 SPI LoRa concentrators (e.g. RAK833, RAK2245, RAK2287, RAK5146, Seeed WM1302 and IMST iC880a among others).
 
 
 ## Introduction
@@ -17,7 +17,9 @@ The Basics™ Station protocol enables the LoRa gateways with a reliable and sec
 * Raspberry Pi 3/4 or [balenaFin](https://www.balena.io/fin/)
 * SD card in case of the RPi 4
 
-#### LoRa Concentrators
+#### LoRa Concentrators (SPI)
+
+Disclaimer: At the moment the basicstation project is not compatible with USB LoRa concentrators. Contributions open :)
 
 * SX1301 
 > * [IMST iC880a](https://shop.imst.de/wireless-modules/lora-products/8/ic880a-spi-lorawan-concentrator-868-mhz)
@@ -26,6 +28,7 @@ The Basics™ Station protocol enables the LoRa gateways with a reliable and sec
 
 * SX1302
 > * [RAK 2287 Concentrator](https://store.rakwireless.com/products/rak2287-lpwan-gateway-concentrator-module) with [RAK 2287 Pi Hat](https://store.rakwireless.com/products/rak2287-pi-hat)
+> * [Seeed WM1302](https://www.seeedstudio.com/WM1302-LoRaWAN-Gateway-Module-SPI-EU868-p-4889.html) with the Pi Hat (this model is compatible with the RAK2287 Pi  Hat as well).
 
 * SX1303
 > * [RAK 5146](https://store.rakwireless.com/products/wislink-lpwan-concentrator-rak5146) with RAK2287 Pi Hat.
