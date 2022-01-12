@@ -40,7 +40,7 @@ variant  ?= std
 
 LOCAL_ARCH := $(shell gcc -dumpmachine)
 
-ifeq (${LOCAL_ARCH}, arm7l-unknown-linux-gnueabihf)
+ifeq (${LOCAL_ARCH},armv7l-unknown-linux-gnueabihf)
 LOCAL_ARCH = arm-linux-gnueabihf
 endif
 
