@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -341,6 +341,7 @@ static int writeData (conn_t* conn) {
             }
             return IO_WRPEND;
         }
+        LOG(MOD_AIO|XDEBUG, "[%d] socket write bytes=%d", conn->netctx.fd, ret);
         conn->wpos += ret;
     }
     return IO_WRDONE;
@@ -420,6 +421,7 @@ static int readData (conn_t* conn, int mode) {
             }
             return IO_RDPEND;
         }
+        LOG(MOD_AIO|XDEBUG, "[%d] socket read  bytes=%d", conn->netctx.fd, r);
         conn->rpos += r;
     }
   compact:
@@ -1097,6 +1099,7 @@ int http_connect (http_t* conn, char* host, char* port) {
     int n = snprintf((char*)conn->c.wbuf, conn->c.wbufsize, "%s:%s", host, port);
     conn->c.wfill = conn->c.rbeg = conn->c.rend = n+1;
     conn->c.state = HTTP_CONNECTED;
+
     rt_yieldTo(&conn->c.tmr, triggerHttpConnectedEv);
     return 1;
 }
@@ -1423,21 +1426,42 @@ int httpd_parseReqLine (httpd_pstate_t* pstate, dbuf_t* hdr) {
 }
 
 
-static int validateAuthToken (str_t s) {
-    str_t p = s;
-    while(1) {
-        int c;
-        while( ((c = *p++) >= 'a' && c <= 'z') || (c >= 'A' && c<= 'Z') || (c >= '0' && c<='9') || c=='-' || c=='_' );
-        if( p==s || c != ':' || p[0] != ' ' )
-            return 0;
-        s = ++p;
-        while( (c=*p++) != '\r' && c != 0 );
-        if( p==s || c==0 || p[0] != '\n' )
-            return 0;
-        if( p[1] == 0 )
-            return 1;
-        s = p = p+1;  // next line
+static str_t validateAuthToken (str_t s) {
+    int l = strlen(s);
+    // Trim empty lines from the end (either \r\n or \n)
+    while( l>0 && s[l-1]=='\n' ) {
+        l -= l>1 && s[l-2]=='\r' ? 2 : 1;
     }
+    // Count \n without preceeding \r
+    int extra = 0;
+    for( int i = l-1; i>=0; i-- ) {
+        if( s[i] == '\n' && (i==0 || s[i-1]=='\r') )
+            extra += 1;
+    }
+    char* w = rt_mallocN(char, l+extra+2+1);
+    if( l==0 ) {
+        return w;
+    }
+    int i=0, j=0;
+    while( i<l ) {
+        int c, fi=i;
+        while( ((c = s[i++]) >= 'a' && c <= 'z') || (c >= 'A' && c<= 'Z') || (c >= '0' && c<='9') || c=='-' || c=='_' ) {
+            w[j++] = c;
+        }
+        if( i==fi+1 || c != ':' || s[i] != ' ' ) {
+            rt_free(w);
+            return NULL;  // field name *must* be followed by COLON SPACE
+        }
+        for( i -= 1; i<l && c!='\n'; i++ ) {
+            c = s[i];
+            if( c == '\n' && s[i-1] != '\r' )
+                w[j++] = '\r';
+            w[j++] = c;
+        }
+    }
+    w[j++] = '\r';
+    w[j++] = '\n';
+    return w;
 }
 
 
@@ -1462,17 +1486,16 @@ int conn_setup_tls (conn_t* conn, int cred_cat, int cred_set, const char* server
             errmsg = "%s%s has unreadable client auth token";
             goto errexit;
         }
-        if( !validateAuthToken(dbuf.buf) ) {
-            errmsg = "%s%s contains malformed auth token - expecting: {header: value\\r\\n}*";
-            rt_free(dbuf.buf);
+        conn->authtoken = validateAuthToken(dbuf.buf);
+        rt_free(dbuf.buf);
+        if( !conn->authtoken ) {
+            errmsg = "%s%s contains malformed auth token - expecting: {header: value{\\r\\n|\\n}}*";
             goto errexit;
-        } else {
-            assert(conn->authtoken==NULL);
-            conn->authtoken = (str_t)dbuf.buf;
         }
     }
     else if( auth == SYS_AUTH_SERVER ) {
         errmsg = "%s%s has no key+cert configured - running server auth only";
+        LOG(MOD_AIO|INFO, errmsg, sys_credcat2str(cred_cat), sys_credset2str(cred_set));
     }
     else if( !tls_setMyCert(tlsconf,
                             elems[SYS_CRED_MYCERT], elemslen[SYS_CRED_MYCERT],
@@ -1480,7 +1503,6 @@ int conn_setup_tls (conn_t* conn, int cred_cat, int cred_set, const char* server
         errmsg = "%s%s key/cert rejected by MBedTLS";
         goto errexit;
     }
-    LOG(MOD_AIO|INFO, errmsg, sys_credcat2str(cred_cat), sys_credset2str(cred_set));
     assert(conn->tlsconf==NULL && conn->tlsctx==NULL);
     conn->tlsconf = tlsconf;
     conn->tlsctx = tls_makeSession(tlsconf, servername);

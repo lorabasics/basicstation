@@ -1,5 +1,5 @@
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -107,10 +107,6 @@ CFG.kerlink = linux lgw1 no_leds
 SD.default = src-linux
 
 SD = $(or ${SD.${platform}}, ${SD.default})
-
-UTILS.linux = mtuns
-
-UTILS = $(or ${UTILS.${platform}}, ${UTILS.default})
 
 DEPS.default = mbedtls lgw
 DEPS.linuxpico = mbedtls smtcpico

@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -73,7 +73,14 @@ int main (int argc, char** argv) {
     printf("#define UJ_UPDATE_CRC(crc,c) %s\n", 4+STR(UPDATE_CRC(crc,c)));
     printf("#define UJ_FINISH_CRC(crc)   %s\n", 4+STR(FINISH_CRC(crc)));
     for( int i=0; i<argc; i++ ) {
-        printf("#define J_%-20s ((ujcrc_t)(0x%08X))\n", argv[i], crcs[i]);
+        char ident[256];
+        int cj = 0;
+        for( cj=0; argv[i][cj]; cj++ ) {
+            char c = argv[i][cj];
+            ident[cj] = (c>='0' && c<='9') || (c>='a' && c<='z') || (c>='A' && c<='Z') ? c : '_';
+        }
+        ident[cj] = 0;
+        printf("#define J_%-20s ((ujcrc_t)(0x%08X))\n", ident, crcs[i]);
     }
     return 0;
 }

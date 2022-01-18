@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -217,7 +217,7 @@ static void test_simple_values() {
 
 static const char* S2 = "{ \
    \"AS923\": 123,         \
-   \"EU863\": true         \
+   \"EU868\": true         \
 }";
 
 static void test_S2() {
@@ -237,7 +237,7 @@ static void test_S2() {
             TCHECK( UJ_UNUM == uj_nextValue(&D) );
             break;
         }
-        case J_EU863: {
+        case J_EU868: {
             TCHECK( UJ_BOOL == uj_nextValue(&D) );
             break;
         }
@@ -253,7 +253,7 @@ static void test_S2() {
 
 static char* S3 = "[ \
    \"AS923\", 123, \
-   \"EU863\", true \
+   \"EU868\", true \
 ]";
 
 static void test_S3() {
@@ -281,7 +281,7 @@ static void test_S3() {
             break;
         }
         case 2: {
-            TCHECK( UJ_STRING == uj_nextValue(&D) && D.str.crc == J_EU863 );
+            TCHECK( UJ_STRING == uj_nextValue(&D) && D.str.crc == J_EU868 );
             break;
         }
         case 3: {
@@ -557,10 +557,10 @@ static void test_sugar() {
         uj_keyword(&D);
         TFAIL("G15");            // LCOV_EXCL_LINE
     }
-    iniDecoder(&D,"\"EU863\"");
+    iniDecoder(&D,"\"EU868\"");
     if( uj_decode(&D) )
         TFAIL("G16");            // LCOV_EXCL_LINE
-    TCHECK(J_EU863 == uj_keyword(&D));
+    TCHECK(J_EU868 == uj_keyword(&D));
 
     // ---------- uj_hexstr
     u1_t buf[6];
@@ -595,10 +595,10 @@ static void test_sugar() {
     if( uj_decode(&D) )
         TFAIL("G30");            // LCOV_EXCL_LINE
     TCHECK(0 == uj_msgtype(&D));
-    iniDecoder(&D,"{\"msgtype\":\"EU863\"}");
+    iniDecoder(&D,"{\"msgtype\":\"EU868\"}");
     if( uj_decode(&D) )
         TFAIL("G31");            // LCOV_EXCL_LINE
-    TCHECK(J_EU863 == uj_msgtype(&D));
+    TCHECK(J_EU868 == uj_msgtype(&D));
     iniDecoder(&D,"{\"msgtyp\":\"msgtyp\"}");
     if( uj_decode(&D) )
         TFAIL("G31");            // LCOV_EXCL_LINE
@@ -607,10 +607,10 @@ static void test_sugar() {
     if( uj_decode(&D) )
         TFAIL("G31");            // LCOV_EXCL_LINE
     TCHECK(0 == uj_msgtype(&D));
-    iniDecoder(&D,"{\"msgtype\":\"EU\\\"\",\"msgtype\":\"EU863\"}");
+    iniDecoder(&D,"{\"msgtype\":\"EU\\\"\",\"msgtype\":\"EU868\"}");
     if( uj_decode(&D) )
         TFAIL("G31");            // LCOV_EXCL_LINE
-    TCHECK(J_EU863 == uj_msgtype(&D));
+    TCHECK(J_EU868 == uj_msgtype(&D));
 
 }
 

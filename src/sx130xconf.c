@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -41,6 +41,8 @@
 #endif // defined(CFG_sx1302)
 
 #define SX130X_RFE_MAX 400000  // Max if offset 400kHz
+
+extern const uint8_t ifmod_config[LGW_IF_CHAIN_NB];
 
 static void parse_tx_gain_lut (ujdec_t* D, struct lgw_tx_gain_lut_s* txlut) {
     int slot;
@@ -142,7 +144,7 @@ static void parse_rfconf (ujdec_t* D, struct sx130xconf* sx130xconf, int rfidx) 
             break;
         }
         case J_rssi_tcomp: {
-            parse_rssi_tcomp(D, &sx130xconf->rfconf->rssi_tcomp);
+            parse_rssi_tcomp(D, &rfconf->rssi_tcomp);
 	        break;
         }
 #endif
@@ -215,14 +217,16 @@ static void parse_ifconf (ujdec_t* D, struct lgw_conf_rxif_s* ifconf) {
 }
 
 static void setDevice (struct sx130xconf* sx130xconf, str_t device) {
-    str_t dev = sys_radioDevice(device);
+    u1_t comtype;
+    str_t dev = sys_radioDevice(device, &comtype);
     int sz = sizeof(sx130xconf->device);
     int n = snprintf(sx130xconf->device, sz, "%s", dev);
     if( n > sz-1 )
         LOG(ERROR, "Device string too long (max %d chars): %s", sz-1, dev);
 #if defined(CFG_sx1302)
-    sz = sizeof(sx130xconf->boardconf.spidev_path);
-    n = snprintf(sx130xconf->boardconf.spidev_path, sz, "%s", dev);
+    sx130xconf->boardconf.com_type = (comtype == COMTYPE_SPI) ? LGW_COM_SPI : LGW_COM_USB;
+    sz = sizeof(sx130xconf->boardconf.com_path);
+    n = snprintf(sx130xconf->boardconf.com_path, sz, "%s", dev);
     if( n > sz-1 )
         LOG(ERROR, "Device string too long (max %d chars): %s", sz-1, dev);
 #endif
@@ -346,7 +350,7 @@ static int setup_LBT (struct sx130xconf* sx130xconf, u4_t cca_region) {
 #if !defined(CFG_sx1302) // For now sx1302 does not support CCA
     u2_t scantime_us = 0;
 
-    if( cca_region == J_AS923JP ) {
+    if( cca_region == J_AS923_1 ) {
         scantime_us = 5000;
         sx130xconf->lbt.rssi_target = -80;
     }
@@ -489,6 +493,136 @@ int sx130xconf_challoc (struct sx130xconf* sx130xconf, chdefl_t* upchs) {
     return ral_challoc(upchs, sx130xconf_challoc_cb, sx130xconf);
 }
 
+static void dump_boardConf (struct lgw_conf_board_s* board) {
+#if defined(CFG_sx1302)
+    LOG(MOD_RAL|INFO, "[LGW sx1302] full_duplex=%d clksrc=%d lorawan_public=%d",
+        board->full_duplex,
+        board->clksrc,
+        board->lorawan_public
+    );
+#else
+    LOG(MOD_RAL|INFO, "[LGW %s] clksrc=%d lorawan_public=%d",
+#if defined(CFG_smtcpico)
+        "smtcpico",
+#else
+        "lgw1",
+#endif
+        board->clksrc,
+        board->lorawan_public
+    );
+#endif
+    log_flushIO();
+}
+
+static void dump_txLut (struct lgw_tx_gain_lut_s* txlut) {
+    LOG(MOD_RAL|DEBUG, "SX130x txlut table (%d entries)", txlut->size);
+    for( int i=0; i<txlut->size; i++ ) {
+#if !defined(CFG_sx1302)
+        LOG(MOD_RAL|INFO,
+            "SX1301 txlut %2d:  dig_gain=%d pa_gain=%d dac_gain=%d mix_gain=%d rf_power=%d", i,
+            txlut->lut[i].dig_gain,
+            txlut->lut[i].pa_gain,
+            txlut->lut[i].dac_gain,
+            txlut->lut[i].mix_gain,
+            txlut->lut[i].rf_power);
+#else
+    LOG(MOD_RAL|INFO,
+            "SX1302 txlut %2d:  rf_power=%d pa_gain=%d pwr_idx=%d", i,
+            txlut->lut[i].rf_power,
+            txlut->lut[i].pa_gain,
+            txlut->lut[i].pwr_idx);
+#endif
+    }
+    log_flushIO();
+}
+
+static void dump_rfConf (int chain, struct lgw_conf_rxrf_s* rfconf) {
+    if( !rfconf->enable ) {
+        LOG(MOD_RAL|INFO, "       RF%d: disabled", chain);
+        log_flushIO();
+        return;
+    }
+    LOG(MOD_RAL|INFO,
+#if defined(CFG_sx1302)
+        " RX%s RF%d: %^8F rssi_offset=%+6.01f type=%d rssi_tcomp=%.03f %.03f %.03f %.03f %.03f",
+#else
+        " RX%s RF%d: %^8F rssi_offset=%+6.01f type=%d tx_notch_freq=%d",
+#endif
+        rfconf->tx_enable ? "/TX" : "   ",
+        chain,
+        rfconf->freq_hz,
+        rfconf->rssi_offset,
+        rfconf->type,
+#if defined(CFG_sx1302)
+        rfconf->rssi_tcomp.coeff_a,
+        rfconf->rssi_tcomp.coeff_b,
+        rfconf->rssi_tcomp.coeff_c,
+        rfconf->rssi_tcomp.coeff_d,
+        rfconf->rssi_tcomp.coeff_e
+#else
+        rfconf->tx_notch_freq
+#endif
+    );
+    log_flushIO();
+}
+
+static void dump_ifConf (int chain, struct lgw_conf_rxrf_s rfconfs[LGW_RF_CHAIN_NB], struct lgw_conf_rxif_s* ifconf) {
+    if( !ifconf->enable ) {
+        LOG(MOD_RAL|INFO," channel %1d disabled", chain);
+        log_flushIO();
+        return;
+    }
+    if(ifmod_config[chain] == IF_LORA_STD) {
+        LOG(MOD_RAL|INFO,
+            " [STD]   %1d: %^8F rf=%d freq=%+6.01f datarate=%d bw=%d %s", chain,
+            rfconfs[ifconf->rf_chain].freq_hz + ifconf->freq_hz,
+            ifconf->rf_chain,
+            (float)ifconf->freq_hz/1000,
+            ifconf->datarate,
+            ifconf->bandwidth,
+#if defined(CFG_sx1302)
+            (ifconf->implicit_hdr == true) ? "Implicit header" : "Explicit header"
+#else
+            ""
+#endif
+            );
+
+    } else if (ifmod_config[chain] == IF_FSK_STD) {
+        LOG(MOD_RAL|INFO,
+            " [FSK]   %1d: %^8F rf=%d freq=%+6.01f datarate=%d bw=%d sync_word=%lX/%d", chain,
+            rfconfs[ifconf->rf_chain].freq_hz + ifconf->freq_hz,
+            ifconf->rf_chain,
+            (float)ifconf->freq_hz/1000,
+            ifconf->datarate,
+            ifconf->bandwidth,
+            ifconf->sync_word, ifconf->sync_word_size);
+    } else {
+        LOG(MOD_RAL|INFO,
+            " [mSF]   %1d: %^8F rf=%d freq=%+6.01f datarate=%d", chain,
+            rfconfs[ifconf->rf_chain].freq_hz + ifconf->freq_hz,
+            ifconf->rf_chain,
+            (float)ifconf->freq_hz/1000,
+            ifconf->datarate);
+    }
+    log_flushIO();
+}
+
+static void dump_lbtConf (struct sx130xconf* sx130xconf) {
+#if !defined(CFG_sx1302)
+    if( sx130xconf->lbt.enable ) {
+        LOG(MOD_RAL|INFO, "SX130x LBT enabled: rssi_target=%d rssi_offset=%d",
+            sx130xconf->lbt.rssi_target, sx130xconf->lbt.rssi_offset);
+        for( int i=0; i < sx130xconf->lbt.nb_channel; i++ ) {
+            LOG(MOD_RAL|INFO, "  %2d: freq=%F scan=%dus",
+                i, sx130xconf->lbt.channels[i].freq_hz, sx130xconf->lbt.channels[i].scan_time_us);
+        }
+    } else {
+        LOG(MOD_RAL|INFO, "SX130x LBT not enabled");
+    }
+    log_flushIO();
+#endif
+}
+
 
 int sx130xconf_start (struct sx130xconf* sx130xconf, u4_t cca_region) {
     str_t errmsg = "";
@@ -502,108 +636,16 @@ int sx130xconf_start (struct sx130xconf* sx130xconf, u4_t cca_region) {
         rt_fatal("Radio device '%s' in use by process: %d%s", sx130xconf->device, pids[0], n>1?".. (and others)":"");
 #endif // defined(CFG_linux)
 
-    LOG(MOD_RAL|VERBOSE,"Connecting to device: %s", sx130xconf->device);
 #if defined(CFG_smtcpico)
+    LOG(MOD_RAL|VERBOSE,"Connecting to smtcpico device: %s", sx130xconf->device);
     // Picocell needs some time to start up from reset before we can connect
     sys_usleep(rt_millis(250));
-    log_flushIO();  // lgw_connect might block - make sure log output is flushed 
+    log_flushIO();  // lgw_connect might block - make sure log output is flushed
     lgw_connect(sx130xconf->device);
     sys_usleep(rt_millis(250));
-    // Force a reset because MCU software may be in a weird state when we connect the first time
 #endif
 
-    if( log_shallLog(MOD_RAL|VERBOSE) ) {
-        LOG(MOD_RAL|DEBUG, "SX130x txlut table (%d entries)", sx130xconf->txlut.size);
-        for( int i=0; i<sx130xconf->txlut.size; i++ ) {
-#if !defined(CFG_sx1302)
-            LOG(MOD_RAL|VERBOSE,
-                "SX1301 txlut %2d:  dig_gain=%d pa_gain=%d dac_gain=%d mix_gain=%d rf_power=%d", i,
-                sx130xconf->txlut.lut[i].dig_gain,
-                sx130xconf->txlut.lut[i].pa_gain,
-                sx130xconf->txlut.lut[i].dac_gain,
-                sx130xconf->txlut.lut[i].mix_gain,
-                sx130xconf->txlut.lut[i].rf_power);
-#else
-       LOG(MOD_RAL|VERBOSE,
-                "SX1302 txlut %2d:  rf_power=%d pa_gain=%d pwr_idx=%d", i,
-                sx130xconf->txlut.lut[i].rf_power,
-                sx130xconf->txlut.lut[i].pa_gain,
-                sx130xconf->txlut.lut[i].pwr_idx);
-#endif
-
-        }
-#if defined(CFG_sx1302)
-        LOG(MOD_RAL|VERBOSE, "SX1302 rssi_tcomp: coeff_a=%.03f coeff_b=%.03f coeff_c=%.03f coeff_d=%.03f coeff_e=%.03f\n",
-            sx130xconf->rfconf->rssi_tcomp.coeff_a,
-            sx130xconf->rfconf->rssi_tcomp.coeff_b,
-            sx130xconf->rfconf->rssi_tcomp.coeff_c,
-            sx130xconf->rfconf->rssi_tcomp.coeff_d,
-            sx130xconf->rfconf->rssi_tcomp.coeff_e);
-#endif
-        for( int i=0; i<LGW_RF_CHAIN_NB; i++ ) {
-            LOG(MOD_RAL|VERBOSE,
-#if defined(CFG_sx1302)
-                "SX1302 rxrfchain %d: enable=%d freq=%F rssi_offset=%f type=%d tx_enable=%d", i,
-#else
-                "SX1301 rxrfchain %d: enable=%d freq=%F rssi_offset=%f type=%d tx_enable=%d tx_notch_freq=%d", i,
-#endif
-                sx130xconf->rfconf[i].enable,
-                sx130xconf->rfconf[i].freq_hz,
-                sx130xconf->rfconf[i].rssi_offset,
-                sx130xconf->rfconf[i].type,
-                sx130xconf->rfconf[i].tx_enable
-#if !defined(CFG_sx1302)
-                , sx130xconf->rfconf[i].tx_notch_freq
-#endif
-                );
-        }
-        for( int i=0; i<LGW_IF_CHAIN_NB; i++ ) {
-#if !defined(CFG_sx1302)
-            LOG(MOD_RAL|VERBOSE,
-                "SX1301 ifchain %2d: enable=%d rf_chain=%d freq=%d bandwidth=%d datarate=%d sync_word=%lX/%d", i,
-                sx130xconf->ifconf[i].enable,
-                sx130xconf->ifconf[i].rf_chain,
-                sx130xconf->ifconf[i].freq_hz,
-                sx130xconf->ifconf[i].bandwidth,
-                sx130xconf->ifconf[i].datarate,
-                sx130xconf->ifconf[i].sync_word, sx130xconf->ifconf[i].sync_word_size);
-#else
-	    if(i == LGW_MULTI_NB){
-                LOG(MOD_RAL|VERBOSE,
-                    "SX1302 ifchain %2d: enable=%d rf_chain=%d freq=%d bw=%d SF=%d sync_word=%lX/%d [STD] %s", i,
-                    sx130xconf->ifconf[i].enable,
-                    sx130xconf->ifconf[i].rf_chain,
-                    sx130xconf->ifconf[i].freq_hz,
-                    sx130xconf->ifconf[i].bandwidth,
-                    sx130xconf->ifconf[i].datarate,
-                    sx130xconf->ifconf[i].sync_word, sx130xconf->ifconf[i].sync_word_size,
-                    (sx130xconf->ifconf[i].implicit_hdr == true) ? "Implicit header" : "Explicit header");
-            }else{
-                LOG(MOD_RAL|VERBOSE,
-                    "SX1302 ifchain %2d: enable=%d rf_chain=%d freq=%d bw=%d SF=%d sync_word=%lX/%d", i,
-                    sx130xconf->ifconf[i].enable,
-                    sx130xconf->ifconf[i].rf_chain,
-                    sx130xconf->ifconf[i].freq_hz,
-                    sx130xconf->ifconf[i].bandwidth,
-                    sx130xconf->ifconf[i].datarate,
-                    sx130xconf->ifconf[i].sync_word, sx130xconf->ifconf[i].sync_word_size);
-            }
-#endif
-        }
-#if !defined(CFG_sx1302)
-        if( sx130xconf->lbt.enable ) {
-            LOG(MOD_RAL|VERBOSE, "SX130x LBT enabled: rssi_target=%d rssi_offset=%d",
-                sx130xconf->lbt.rssi_target, sx130xconf->lbt.rssi_offset);
-            for( int i=0; i < sx130xconf->lbt.nb_channel; i++ ) {
-                LOG(MOD_RAL|VERBOSE, "  %2d: freq=%F scan=%dus",
-                    i, sx130xconf->lbt.channels[i].freq_hz, sx130xconf->lbt.channels[i].scan_time_us);
-            }
-        } else {
-            LOG(MOD_RAL|VERBOSE, "SX130x LBT not enabled");
-        }
-#endif
-    }
-
+    dump_boardConf(&sx130xconf->boardconf);
 #if defined(CFG_sx1302)
     if( lgw_board_setconf(&sx130xconf->boardconf) != LGW_HAL_SUCCESS ) {
 #else
@@ -613,6 +655,7 @@ int sx130xconf_start (struct sx130xconf* sx130xconf, u4_t cca_region) {
         goto fail;
     }
     if( sx130xconf->txlut.size > 0) {
+        dump_txLut(&sx130xconf->txlut);
 #if defined(CFG_sx1302)
         if( lgw_txgain_setconf(0, &sx130xconf->txlut) != LGW_HAL_SUCCESS ) {
 #else
@@ -623,6 +666,7 @@ int sx130xconf_start (struct sx130xconf* sx130xconf, u4_t cca_region) {
         }
     }
     for( int i=0; i<LGW_RF_CHAIN_NB; i++ ) {
+        dump_rfConf(i, &sx130xconf->rfconf[i]);
 #if defined(CFG_sx1302)
         if( lgw_rxrf_setconf(i, &sx130xconf->rfconf[i]) != LGW_HAL_SUCCESS ) {
 #else
@@ -634,6 +678,7 @@ int sx130xconf_start (struct sx130xconf* sx130xconf, u4_t cca_region) {
         }
     }
     for( int i=0; i<LGW_IF_CHAIN_NB; i++ ) {
+        dump_ifConf(i, sx130xconf->rfconf, &sx130xconf->ifconf[i]);
 #if defined(CFG_sx1302)
         if( lgw_rxif_setconf(i, &sx130xconf->ifconf[i]) != LGW_HAL_SUCCESS ) {
 #else
@@ -645,18 +690,24 @@ int sx130xconf_start (struct sx130xconf* sx130xconf, u4_t cca_region) {
         }
     }
 
+    dump_lbtConf(sx130xconf);
     if( cca_region && !setup_LBT(sx130xconf, cca_region) ) {
         errmsg = "setup_LBT";
         goto fail;
     }
 
-    LOG(MOD_RAL|VERBOSE, "Station device: %s (PPS capture %sabled)", sx130xconf->device, sx130xconf->pps ? "en":"dis");
-    log_flushIO();  // flush output since lgw_start may block for quite some time on some concentrators
 #if defined(CFG_sx1302)
+    LOG(MOD_RAL|INFO, "Station device: %s:%s (PPS capture %sabled)",
+        sx130xconf->boardconf.com_type == LGW_COM_USB ? "usb" : "spi",
+        sx130xconf->device, sx130xconf->pps ? "en":"dis"
+    );
     (void) sys_deviceMode; // TODO: Add device mode to sx1302 hal
 #else
+    LOG(MOD_RAL|INFO, "Station device: %s (PPS capture %sabled)", sx130xconf->device, sx130xconf->pps ? "en":"dis");
     lgwx_device_mode = sys_deviceMode;
 #endif
+    log_flushIO();  // flush output since lgw_start may block for quite some time on some concentrators
+
     ustime_t t0 = rt_getTime();
     int err = lgw_start();
     if( err != LGW_HAL_SUCCESS ) {
@@ -671,7 +722,7 @@ int sx130xconf_start (struct sx130xconf* sx130xconf, u4_t cca_region) {
         errmsg = "LGW GPS Enable";
         goto fail;
     }
-    LOG(MOD_RAL|VERBOSE, "Concentrator started (%~T)", rt_getTime()- t0);
+    LOG(MOD_RAL|INFO, "Concentrator started (%~T)", rt_getTime()- t0);
 #if defined(CFG_smtcpico)
     {
         // Avoid timing issues with picocell MCU firmware - re-adjusts time after first TX

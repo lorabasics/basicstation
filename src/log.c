@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -51,7 +51,7 @@ const char* MODSTR[] = {
     [MOD_CUP/8]= "CUP",
     [MOD_SYS/8]= "SYS",
     [MOD_TCE/8]= "TCE",
-    [MOD_TST/8]= "TST",
+    [MOD_HAL/8]= "HAL",
     [MOD_SIO/8]= "___",
     [MOD_SYN/8]= "SYN",
     [MOD_GPS/8]= "GPS",
@@ -156,6 +156,13 @@ void log_msg (u1_t mod_level, const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     log_vmsg(mod_level, fmt, ap);
+    va_end(ap);
+}
+
+void log_hal (u1_t level, const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    log_vmsg(MOD_HAL|level, fmt, ap);
     va_end(ap);
 }
 

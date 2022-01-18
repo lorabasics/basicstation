@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -53,6 +53,9 @@ int sys_enableGPS (str_t _device) {
 #include "s2conf.h"
 
 
+// Special value to mark absent NMEA float/int field - e.g. $GPGGA,170801.00,,,,,0,00,99.99,,,,,,*69
+#define NILFIELD 0x423a0a60
+
 #if defined(CFG_ubx)
 // We don't need UBX to operate station - we get time from server
 // under the assumption both station and server are synced to a PPS.
@@ -64,9 +67,9 @@ int sys_enableGPS (str_t _device) {
 static u1_t UBX_EN_NAVTIMEGPS[] = {
     UBX_SYN1, UBX_SYN2,
     0x06, 0x01, // class/ID
-    0x08, 0x00, // payload length
-    0x01, 0x20, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, // Enable NAV-TIMEGPS output on serial
-    0x32, 0x94 // checksum
+    0x03, 0x00, // payload length
+    0x01, 0x20, 0x01, // Enable NAV-TIMEGPS messages on current port (serial) with 1s rate
+    0x2C, 0x83 // checksum
 };
 #endif // defined(CFG_ubx)
 
@@ -116,6 +119,7 @@ static int nmea_cksum ( u1_t* data, int len) {
             int s = (rt_hexDigit(data[i+1]) << 4) | rt_hexDigit(data[i+2]);
             if( s!=v)
                 LOG(MOD_GPS|ERROR,"NMEA checksum error: %02X vs %02X", s, v);
+            data[i+1] = data[i+2] = 0;  // used for missing fields detection
             return s==v;
         }
         v ^= data[i];
@@ -124,13 +128,26 @@ static int nmea_cksum ( u1_t* data, int len) {
 }
 
 
+// Parse a set of NMEA fields as string values.
+// Return zero terinated pointers. Note, field terminators (, / * ) are
+// overwritten with \0.
+// IN:
+//    pp   - current read pointer into NMEA sentecne - at the start of a field
+//    cnt  - number fields to parse
+//    args - array of pointers to found field starts (zero terminated strings)
+// RETURN:
+//    0    - parsing failed - not enough fields
+//    1    - parsing ok - field starts in args[0:cnt]
+// OUT:
+//    pp - advanced read pointer - stops after cnt-th field (after , or *)
+//    args[..] - pointers to found field starts
 static int nmea_str (char** pp, int cnt, char** args) {
     char* p = *pp;
     int c, i = 0;
-    c = p[0];
     while( i < cnt ) {
-        if( c == '*' )
-            return 0;
+        if( p[0] == '\0' ) {
+            return 0;  // field missing
+        }
         args[i] = p;
         while( (c=p[0]) != ',' && c != '*' )
             p++;
@@ -144,8 +161,13 @@ static int nmea_str (char** pp, int cnt, char** args) {
 
 static int nmea_decimal(char** pp, sL_t* pv) {
     char* p = *pp;
-    if( p[0] == '*' )
-        return 0;
+    if( p[0] == '\0' ) {
+        return 0;  // field missing
+    }
+    if( p[0] == '*' || p[0] == ',' ) {
+        pv[0] = NILFIELD;
+        return 1;
+    }
     int sign = 0;
     if( *p == '-' ) {
         p++;
@@ -164,8 +186,13 @@ static int nmea_decimal(char** pp, sL_t* pv) {
 
 static int nmea_float(char** pp, double* pv) {
     char* p = *pp;
-    if( p[0] == '*' )
-        return 0;
+    if( p[0] == '\0' ) {
+        return 0;  // field missing
+    }
+    if( p[0] == '*' || p[0] == ',' ) {
+        pv[0] = NILFIELD;
+        return 1;
+    }
     int sign = 0;
     if( *p == '-' ) {
         p++;
@@ -221,11 +248,12 @@ str_t GPSEV_MOVE = "move";
 str_t GPSEV_FIX = "fix";
 str_t GPSEV_NOFIX = "nofix";
 
-static int send_gpsev_fix(str_t gpsev, float lat, float lon, float alt, float dilution, int satellites, int quality, float from_lat, float from_lon) {
+static int send_gpsev_fix(str_t gpsev, float lat, float lon, float alt,
+                          float dilution, int satellites, int quality, float from_lat, float from_lon) {
     assert(gpsev == GPSEV_MOVE  || gpsev == GPSEV_FIX || gpsev == GPSEV_NOFIX);
     ujbuf_t sendbuf = (*TC->s2ctx.getSendbuf)(&TC->s2ctx, MIN_UPJSON_SIZE);
     if( sendbuf.buf == NULL ) {
-        LOG(MOD_S2E|ERROR, "Failed to send gps event, no buffer space");
+        LOG(MOD_S2E|ERROR, "Failed to send GPS event. Either no TC connection or insufficient IO buffer space.");
         return 0;
     }
     uj_encOpen(&sendbuf, '{');
@@ -249,14 +277,14 @@ static int send_gpsev_fix(str_t gpsev, float lat, float lon, float alt, float di
         LOG(MOD_GPS|INFO, "GPS fix: %.7f,%.7f alt=%.1f dilution=%f satellites=%d quality=%d",
             lat, lon, alt, dilution, satellites, quality);
         return send_alarm("{\"msgtype\":\"alarm\","
-                            "\"text\":\"GPS fix: %.7f,%.7f alt=%.1f dilution=%f satellites=%d quality=%d\"}",
-                            lat, lon, alt, dilution, satellites, quality);
+                          "\"text\":\"GPS fix: %.7f,%.7f alt=%.1f dilution=%f satellites=%d quality=%d\"}",
+                          lat, lon, alt, dilution, satellites, quality);
     } else {
         LOG(MOD_GPS|INFO, "GPS move %.7f,%.7f => %.7f,%.7f (alt=%.1f dilution=%f satellites=%d quality=%d)",
             from_lat, from_lon, lat, lon, alt, dilution, satellites, quality);
         return send_alarm("{\"msgtype\":\"alarm\","
-                            "\"text\":\"GPS move %.7f,%.7f => %.7f,%.7f (alt=%.1f dilution=%f satellites=%d quality=%d)\"}",
-                            from_lat, from_lon, lat,lon, alt, dilution, satellites, quality);
+                          "\"text\":\"GPS move %.7f,%.7f => %.7f,%.7f (alt=%.1f dilution=%f satellites=%d quality=%d)\"}",
+                          from_lat, from_lon, lat, lon, alt, dilution, satellites, quality);
     }
 }
 
@@ -282,17 +310,17 @@ static int send_gpsev_nofix(ustime_t since) {
     LOG(MOD_GPS|INFO, "GPS nofix: since %~T", since);
 
     return send_alarm("{\"msgtype\":\"alarm\","
-        "\"text\":\"No GPS fix since %~T\"}", since);
+                      "\"text\":\"No GPS fix since %~T\"}", since);
 }
 
 
 
 
 static float nmea_p2dec(float lat, char d) {
-  s4_t dd = (s4_t)(lat/100);
-  float ss = lat - dd * 100;
-  float dec = (ss/60.0 + dd);
-  return (d == 'S' || d == 'W') ? (-1 * dec) : dec;
+    s4_t dd = (s4_t)(lat/100);
+    float ss = lat - dd * 100;
+    float dec = (ss/60.0 + dd);
+    return (d == 'S' || d == 'W') ? (-1 * dec) : dec;
 }
 
 
@@ -315,7 +343,10 @@ static void nmea_gga (char* p) {
         LOG(MOD_GPS|ERROR, "Failed to parse GPS GGA sentence: (len=%d) %.*s", len, len, pp);
         return;
     }
-
+    if( lat == NILFIELD || lon == NILFIELD ) {
+        LOG(MOD_GPS|WARNING, "GGA sentence without a fix - bad GPS signal?");
+        return;
+    }
     lat = nmea_p2dec(lat, latD[0]);
     lon = nmea_p2dec(lon, lonD[0]);
     LOG(MOD_GPS|XDEBUG, "nmea_gga: lat %f, lon %f", lat, lon);
@@ -341,7 +372,7 @@ static void nmea_gga (char* p) {
     if( fix < 0 ) {
         ustime_t thres = time_fixchange + (1<<nofix_backoff)*delay;
         if( now > thres &&
-            send_gpsev_nofix(time_fixchange-now)) {
+            send_gpsev_nofix(now-time_fixchange)) {
             last_reported_fix = fix;
             nofix_backoff = max(nofix_backoff+1, 16);
         }
@@ -371,14 +402,8 @@ static void nmea_gga (char* p) {
     last_quality = quality;
 
     if( report_move &&
-        send_gpsev_fix(GPSEV_MOVE, lat, lon, alt, dilution, satellites, quality, from_lon, from_lon)) {
-        //send_alarm("{\"msgtype\":\"alarm\","
-      //"\"text\":\"GPS move %.7f,%.7f => %.7f,%.7f (alt=%.1f dilution=%f satellites=%d quality=%d)\"}",
-      //           from_lat, from_lon, orig_lat, orig_lon, alt, dilution, satellites, quality) ) {
+        send_gpsev_fix(GPSEV_MOVE, lat, lon, alt, dilution, satellites, quality, from_lat, from_lon)) {
         report_move = 0;
-        //LOG(MOD_GPS|INFO, "GPS move %.7f,%.7f => %.7f,%.7f (alt=%.1f dilution=%f satellites=%d quality=%d)",
-        //  from_lat, from_lon, orig_lat, orig_lon, alt, dilution, satellites, quality);
-
     }
 }
 
@@ -413,7 +438,7 @@ static void gps_read(aio_t* _aio) {
         for( int i=0; i<n; i++ ) {
             if( gpsline[i] == '\n' ) {
                 if( nmea_cksum(gpsline, i) ) {
-                    LOG(MOD_GPS|XDEBUG, "GPS: %.*s", i+1, &gpsline[done]);
+                    LOG(MOD_GPS|XDEBUG, "NMEA: %.*s", i+1, &gpsline[done]);
                     if( gpsline[done+0] == '$' && gpsline[done+3] == 'G' &&
                         gpsline[done+4] == 'G' && gpsline[done+5] == 'A' && gpsline[done+6] == ',' ) {
                         nmea_gga((char*)gpsline+7);
@@ -421,7 +446,7 @@ static void gps_read(aio_t* _aio) {
                 }
                 else {
                     if( garbageCnt == 0 ) {
-                        LOG(MOD_GPS|WARNING, "GPS garbage: %.*s", i+1, &gpsline[done]);
+                        LOG(MOD_GPS|XDEBUG, "GPS garbage (%d bytes): %64H", i+1, i+1, &gpsline[done]);
                     } else {
                         garbageCnt -= 1;  // 1st few sentences might be garbage
                     }
@@ -430,6 +455,7 @@ static void gps_read(aio_t* _aio) {
                 break;
             }
 #if defined(CFG_ubx)
+            // UBX
             if( gpsline[i] == UBX_SYN1 && i+1 < n && gpsline[i+1] == UBX_SYN2 ) {
                 if( i+6 > n )
                     break; // need more data to read header
@@ -438,23 +464,28 @@ static void gps_read(aio_t* _aio) {
                     break;
                 u2_t cksum = rt_rlsbf2(&gpsline[i+6+ubxlen]);
                 u2_t fltch = fletcher8(&gpsline[i+2], ubxlen+4);
-                LOG(MOD_GPS|DEBUG, "UBX cksum=%04X vs found=%04X", cksum, fltch);
                 if( cksum != fltch ) {
+                LOG(MOD_GPS|XDEBUG, "UBX cksum=%04X vs found=%04X", cksum, fltch);
                     done = i+1;
                     break;
                 }
                 done = i+8+ubxlen;
+                // NAV-TIMEGPS
                 if( gpsline[i+2] == 0x01 && gpsline[i+3] == 0x20 && ubxlen == 16 ) {
-                    u4_t tow      = rt_rlsbf4(&gpsline[i+6]);    // GPS time of week in ms
-                    u4_t tow_ns   = rt_rlsbf4(&gpsline[i+6+4]);
-                    u2_t week     = rt_rlsbf2(&gpsline[i+6+4+2]);
-                    u1_t leapsecs = gpsline[i+6+4+2+0];
-                    u1_t status   = gpsline[i+6+4+2+1];
-                    u4_t tacc     = rt_rlsbf4(&gpsline[i+6+4+2+2]);
-                    LOG(MOD_GPS|DEBUG, "NAV-TIMEGPS tow(ms)=%d.%06d week=%d leapsecs=%d status=%d tacc=%d",
-                        tow, tow_ns, week, leapsecs, status, tacc);
+                    u4_t itow     = rt_rlsbf4(&gpsline[i+6]);    // GPS time of week in ms
+                    s4_t ftow     = rt_rlsbf4(&gpsline[i+6+4]);  // +/- 500000 ns
+                    u2_t week     = rt_rlsbf2(&gpsline[i+6+4+4]);
+                    u1_t leapsecs = gpsline[i+6+4+4+2];
+                    u1_t valid    = gpsline[i+6+4+4+2+1];
+                    u4_t tacc     = rt_rlsbf4(&gpsline[i+6+4+4+2+1+1]);
+                    if( ftow < 0 ) {
+                        itow -= 1;
+                        ftow += 1000000;
+                    }
+                    LOG(MOD_GPS|XDEBUG, "NAV-TIMEGPS tow(ms)=%d.%06d week=%d leapsecs=%d valid=0x%x tacc(ns)=%d",
+                        itow, ftow, week, leapsecs, valid, tacc);
                 } else {
-                    LOG(MOD_GPS|WARNING, "Unknown UBX frame: %H", 8+ubxlen, &gpsline[i]);
+                    LOG(MOD_GPS|XDEBUG, "Unknown UBX frame: %H", 8+ubxlen, &gpsline[i]);
                 }
                 break;
             }
@@ -589,7 +620,7 @@ int sys_enableGPS (str_t _device) {
         return 1;  // no GPS device configured
     device = _device;
     baud = 9600;
-    ubx = 0;
+    ubx = 1;
 
     rt_iniTimer(&reopen_tmr, reopen_timeout);
     if( !gps_reopen() ) {
@@ -621,4 +652,3 @@ int sys_enableGPS (str_t _device) {
 }
 
 #endif
-

@@ -1,5 +1,5 @@
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -55,12 +55,14 @@ class TestMuxs(tu.Muxs):
     tscnt = 0
     first = None
 
-    async def testDone(self, status):
+    async def testDone(self, status, msg=''):
         global station
         if station:
             station.terminate()
             await station.wait()
             station = None
+        if status:
+            print(f'TEST FAILED code={status} ({msg})', file=sys.stderr)
         os._exit(status)
 
     async def handle_timesync(self, ws, msg):
@@ -82,8 +84,8 @@ class TestMuxs(tu.Muxs):
 
 
 async def timeout():
-    await asyncio.sleep(20)
-    await muxs.testDone(2)
+    await asyncio.sleep(50)
+    await muxs.testDone(2, 'TIMEOUT')
 
 
 async def test_start():

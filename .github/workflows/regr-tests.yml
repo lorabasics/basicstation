@@ -1,0 +1,32 @@
+name: regr-tests
+on: [push]
+jobs:
+  run-regr-tests:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+      - name: Setup environment
+        run: |
+          sudo apt-get install -y python3.7 python3-pip virtualenv psmisc git build-essential lcov curl netcat-openbsd
+          virtualenv --python python3.7 pyenv
+          . pyenv/bin/activate
+          pip3 install setuptools aiohttp websockets
+      - name: Execute Tests
+        run: |
+          # relax some regr test success conditions - related to timing
+          . pyenv/bin/activate
+          export PPSTHRES=100
+          export TX_AIM_GAP='"40ms"'
+          make -C regr-tests ci s2core.info
+      - name: Archive logs
+        uses: actions/upload-artifact@v2
+        with:
+          name: Test logs
+          path: regr-tests/t.log/*.log
+      - name: Archive Coverage report
+        uses: actions/upload-artifact@v2
+        with:
+          name: Coverage report
+          path: regr-tests/s2core-html/**
+

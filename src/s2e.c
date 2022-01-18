@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -52,7 +52,7 @@ static void s2e_bcntimeout (tmr_t* tmr);
 static void setDC (s2ctx_t* s2ctx, ustime_t t) {
     for( u1_t u=0; u<MAX_TXUNITS; u++ ) {
         for( u1_t i=0; i<DC_NUM_BANDS; i++ )
-            s2ctx->txunits[u].dc_eu863bands[i] = t;
+            s2ctx->txunits[u].dc_eu868bands[i] = t;
         for( u1_t i=0; i<MAX_DNCHNLS; i++ )
             s2ctx->txunits[u].dc_perChnl[i] = t;
     }
@@ -126,7 +126,7 @@ void s2e_addRxjob (s2ctx_t* s2ctx, rxjob_t* rxjob) {
             // Duplicate detected - drop the mirror
             if( (8*rxjob->snr - rxjob->rssi) > (8*p->snr - p->rssi) ) {
                 // Drop previous frame p
-                LOG(MOD_S2E|DEBUG, "Dropped mirror frame freq=%F snr=%5.1f rssi=%d (vs. freq=%F snr=%5.1f rssi=%d) - DR%d mic=%d (%d byes)",
+                LOG(MOD_S2E|DEBUG, "Dropped mirror frame freq=%F snr=%5.1f rssi=%d (vs. freq=%F snr=%5.1f rssi=%d) - DR%d mic=%d (%d bytes)",
                     p->freq, p->snr/4.0, -p->rssi, rxjob->freq, rxjob->snr/4.0, -rxjob->rssi,
                     p->dr, (s4_t)rt_rlsbf4(&s2ctx->rxq.rxdata[p->off]+rxjob->len-4), p->len);
 
@@ -134,7 +134,7 @@ void s2e_addRxjob (s2ctx_t* s2ctx, rxjob_t* rxjob) {
                 rxjob = rxq_dropJob(&s2ctx->rxq, p);
             } else {
                 // else: Drop newly retrieved frame - aka don't commit it
-                LOG(MOD_S2E|DEBUG, "Dropped mirror frame freq=%F snr=%5.1f rssi=%d (vs. freq=%F snr=%5.1f rssi=%d) - DR%d mic=%d (%d byes)",
+                LOG(MOD_S2E|DEBUG, "Dropped mirror frame freq=%F snr=%5.1f rssi=%d (vs. freq=%F snr=%5.1f rssi=%d) - DR%d mic=%d (%d bytes)",
                     rxjob-> freq, rxjob->snr/4.0, -rxjob->rssi, p->freq, p->snr/4.0, -p->rssi,
                     rxjob->dr, (s4_t)rt_rlsbf4(&s2ctx->rxq.rxdata[rxjob->off]+rxjob->len-4), rxjob->len);
             }
@@ -205,7 +205,7 @@ void s2e_flushRxjobs (s2ctx_t* s2ctx) {
 // --------------------------------------------------------------------------------
 
 
-static const u2_t DC_EU863BAND_RATE[] = {
+static const u2_t DC_EU868BAND_RATE[] = {
     [DC_DECI ]=   10,
     [DC_CENTI]=  100,
     [DC_MILLI]= 1000,
@@ -289,12 +289,12 @@ static void send_dntxed (s2ctx_t* s2ctx, txjob_t* txjob) {
         uj_encClose(&sendbuf, '}');
         (*s2ctx->sendText)(s2ctx, &sendbuf);
     }
-    LOG(MOD_S2E|INFO, "TX %J - %s: %F %.1fdBm ant#%d(%d) DR%d %R frame=%12.4H",
+    LOG(MOD_S2E|INFO, "TX %J - %s: %F %.1fdBm ant#%d(%d) DR%d %R frame=%12.4H (%u bytes)",
         txjob, txjob->deveui ? "dntxed" : "on air",
         txjob->freq, (double)txjob->txpow/TXPOW_SCALE,
         txjob->txunit, ral_rctx2txunit(txjob->rctx),     // sending/receiving antenna
         txjob->dr, s2e_dr2rps(s2ctx, txjob->dr),
-        txjob->len, &s2ctx->txq.txdata[txjob->off]);
+        txjob->len, &s2ctx->txq.txdata[txjob->off], txjob->len);
 }
 
 
@@ -366,15 +366,15 @@ static int freq2band (u4_t freq) {
 }
 
 static void update_DC (s2ctx_t* s2ctx, txjob_t* txj) {
-    if( s2ctx->region == J_EU863 ) {
+    if( s2ctx->region == J_EU868 ) {
         u1_t band = freq2band(txj->freq);
-        ustime_t* dcbands = s2ctx->txunits[txj->txunit].dc_eu863bands;
+        ustime_t* dcbands = s2ctx->txunits[txj->txunit].dc_eu868bands;
         ustime_t t = dcbands[band];
         // Update unless disabled or blocked
         if( t != USTIME_MIN && t != USTIME_MAX ) {
-            dcbands[band] = t = txj->txtime + txj->airtime * DC_EU863BAND_RATE[band];
-            LOG(XDEBUG, "DC EU band %d blocked until %>.3T (txtime=%>.3T airtime=%~T)",
-                DC_EU863BAND_RATE[band], t, txj->txtime, (ustime_t)txj->airtime);
+            dcbands[band] = t = txj->txtime + txj->airtime * DC_EU868BAND_RATE[band];
+            LOG(MOD_S2E|XDEBUG, "DC EU band %d blocked until %>.3T (txtime=%>.3T airtime=%~T)",
+                DC_EU868BAND_RATE[band], rt_ustime2utc(t), rt_ustime2utc(txj->txtime), (ustime_t)txj->airtime);
         }
     }
     int dnchnl = txj->dnchnl;
@@ -383,8 +383,8 @@ static void update_DC (s2ctx_t* s2ctx, txjob_t* txj) {
     // Update unless disabled or blocked
     if( t != USTIME_MIN && t != USTIME_MAX ) {
         dclist[dnchnl] = t = txj->txtime + txj->airtime * s2ctx->dc_chnlRate;
-        LOG(XDEBUG, "DC dnchnl %d blocked until %>.3T (txtime=%>.3T airtime=%~T)",
-            dnchnl, t, txj->txtime, (ustime_t)txj->airtime);
+        LOG(MOD_S2E|XDEBUG, "DC dnchnl %d blocked until %>.3T (txtime=%>.3T airtime=%~T)",
+            dnchnl, rt_ustime2utc(t), rt_ustime2utc(txj->txtime), (ustime_t)txj->airtime);
     }
 }
 
@@ -474,9 +474,9 @@ static int altTxTime (s2ctx_t* s2ctx, txjob_t* txjob, ustime_t earliest) {
 }
 
 
-static int s2e_canTxEU863 (s2ctx_t* s2ctx, txjob_t* txjob, int* ccaDisabled) {
+static int s2e_canTxEU868 (s2ctx_t* s2ctx, txjob_t* txjob, int* ccaDisabled) {
     ustime_t txtime = txjob->txtime;
-    ustime_t band_exp = s2ctx->txunits[txjob->txunit].dc_eu863bands[freq2band(txjob->freq)];
+    ustime_t band_exp = s2ctx->txunits[txjob->txunit].dc_eu868bands[freq2band(txjob->freq)];
     if( txtime >= band_exp ) {
         
         return 1;   // clear channel analysis not required
@@ -497,7 +497,7 @@ static int s2e_canTxPerChnlDC (s2ctx_t* s2ctx, txjob_t* txjob, int* ccaDisabled)
         txjob, txjob->freq, rt_ustime2utc(txtime), rt_ustime2utc(chfree));
     return 0;
 
-    ustime_t band_exp = s2ctx->txunits[txjob->txunit].dc_eu863bands[freq2band(txjob->freq)];
+    ustime_t band_exp = s2ctx->txunits[txjob->txunit].dc_eu868bands[freq2band(txjob->freq)];
     if( txtime >= band_exp )
         return 1;   // clear channel analysis not required
     // No DC in band
@@ -637,6 +637,7 @@ ustime_t s2e_nextTxAction (s2ctx_t* s2ctx, u1_t txunit) {
                 // Something went wrong - should be emitting
                 LOG(MOD_S2E|ERROR, "%J - radio is not emitting frame - abandoning TX, trying alternative", curr);
                 ral_txabort(txunit);
+                curr->txflags &= ~TXFLAG_TXING;
                 goto check_alt;
             }
             // Looks like it's on air
@@ -666,7 +667,8 @@ ustime_t s2e_nextTxAction (s2ctx_t* s2ctx, u1_t txunit) {
     }
     // Txtime time too far out Head is TXable - is it time to feed the radio?
     if( txdelta > TX_AIM_GAP ) {
-        LOG(MOD_S2E|DEBUG, "%J - next TX start ahead by %~T", curr, txdelta);
+        LOG(MOD_S2E|DEBUG, "%J - next TX start ahead by %~T (%>.6T)",
+            curr, txdelta, rt_ustime2utc(curr->txtime));
         return curr->txtime - TX_AIM_GAP;
     }
 
@@ -710,7 +712,13 @@ ustime_t s2e_nextTxAction (s2ctx_t* s2ctx, u1_t txunit) {
         }
     } while(1);
 
-    LOG(MOD_S2E|VERBOSE, "%J - starting TX in %~T", curr, txdelta);
+    LOG(MOD_S2E|VERBOSE, "%J - starting TX in %~T: %F %.1fdBm ant#%d(%d) DR%d %R frame=%12.4H (%u bytes)",
+        curr, txdelta,
+        curr->freq, (double)curr->txpow/TXPOW_SCALE,
+        curr->txunit, ral_rctx2txunit(curr->rctx),     // sending/receiving antenna
+        curr->dr, s2e_dr2rps(s2ctx, curr->dr),
+        curr->len, &s2ctx->txq.txdata[curr->off], curr->len);
+
     int txerr = ral_tx(curr, s2ctx, ccaDisabled);
     if( txerr != RAL_TX_OK ) {
         if( txerr == RAL_TX_NOCA ) {
@@ -754,20 +762,25 @@ static void s2e_bcntimeout (tmr_t* tmr) {
     sL_t xtime = ts_ustime2xtime(0, now);
     sL_t gpstime = ts_xtime2gpstime(xtime);
     double lat, lon;
-    int latlon_ok;
-    ustime_t ahead;
-    
-    if( gpstime == 0 || !(latlon_ok = sys_getLatLon(&lat, &lon)) ) {
+    int latlon_ok = sys_getLatLon(&lat, &lon);
+    u1_t state = (gpstime ? BCNING_OK:BCNING_NOTIME) | (latlon_ok?BCNING_OK:BCNING_NOPOS);
+
+    if( state != s2ctx->bcn.state ) {
+        str_t msg = state==BCNING_OK
+            ? "Beaconing resumed - recovered GPS data: %s %s"
+            : "Beaconing suspend - missing GPS data: %s %s";
+        u1_t change = state ^ s2ctx->bcn.state;
+        LOG(MOD_S2E|INFO, msg, (change&BCNING_NOTIME)?"time":"", (change&BCNING_NOPOS)?"position":"");
+        s2ctx->bcn.state = state;
+    }
+    if( state != BCNING_OK ) {
         // We don't have PPS or we are not yet time synced -- retry after a while
-        ahead = rt_seconds(10);
-        LOG(MOD_S2E|INFO, "Beaconing suspended for %~T - insufficient GPS data: %s %s",
-            ahead, gpstime==0?"time":"", latlon_ok?"position":"");
-        rt_setTimer(tmr, now + ahead);
+        rt_setTimer(tmr, now + rt_seconds(10));
         return;
     }
-    
+
     // Next beacon TX time is on upcoming multipl of 128s GPS time which is at least 1s ahead
-    ahead = BEACON_INTVL - gpstime % BEACON_INTVL;
+    ustime_t ahead = BEACON_INTVL - gpstime % BEACON_INTVL;
     sL_t gpstxtime = gpstime + ahead;
     txjob_t* txjob = txq_reserveJob(&s2ctx->txq);
     if( txjob == NULL ) {
@@ -787,6 +800,7 @@ static void s2e_bcntimeout (tmr_t* tmr) {
     txjob->txtime  = ts_xtime2ustime(txjob->xtime);
     txjob->freq    = s2ctx->bcn.freqs[epoch % (ctrl>>4)];
     txjob->dr      = ctrl & 0xF;
+    txjob->addcrc  = false;
     txjob->txflags = TXFLAG_BCN;
     txjob->prio    = PRIO_BEACON;
     txjob->len     = bcn_len;
@@ -795,7 +809,7 @@ static void s2e_bcntimeout (tmr_t* tmr) {
     txq_commitJob(&s2ctx->txq, txjob);
     if( !s2e_addTxjob(s2ctx, txjob, /*initial placement*/0, now) )
         txq_freeJob(&s2ctx->txq, txjob);
-    
+
   nextbcn:
     // Sleep until next beacon is 800ms ahead
     ahead += BEACON_INTVL - rt_millis(800);
@@ -848,12 +862,14 @@ static int handle_router_config (s2ctx_t* s2ctx, ujdec_t* D) {
     ujbuf_t sx130xconf = { .buf=NULL };
     ujcrc_t field;
     u1_t ccaDisabled=0, dcDisabled=0, dwellDisabled=0;   // fields not present
-    s2_t default_txpow = 14 * TXPOW_SCALE;  // builtin default
+    s2_t max_eirp = 100 * TXPOW_SCALE;  // special value - no setting requested
     int jlistlen = 0;
     chdefl_t upchs = {{0}};
     int chslots = 0;
     s2bcn_t bcn = { 0 };
-        
+
+    s2ctx->txpow = 14 * TXPOW_SCALE;  // builtin default
+
     while( (field = uj_nextField(D)) ) {
         switch(field) {
         case J_freq_range: {
@@ -901,8 +917,8 @@ static int handle_router_config (s2ctx_t* s2ctx, ujdec_t* D) {
                         BWNIL, upchs.rps[insert-1].minSF, upchs.rps[insert-1].maxSF);
                     insert--;
                 }
-                int minDR = (uj_nextSlot(D), uj_intRange(D, 0, DR_CNT-1));
-                int maxDR = (uj_nextSlot(D), uj_intRange(D, 0, DR_CNT-1));
+                int minDR = (uj_nextSlot(D), uj_intRange(D, 0, 8-1)); // Currently all upchannel DRs must be specified within DRs 0-7
+                int maxDR = (uj_nextSlot(D), uj_intRange(D, 0, 8-1)); // Currently all upchannel DRs must be specified within DRs 0-7
                 upch_insert(&upchs, insert, freq, BWNIL, minDR, maxDR);
                 uj_exitArray(D);
                 chslots++;
@@ -955,12 +971,16 @@ static int handle_router_config (s2ctx_t* s2ctx, ujdec_t* D) {
             break;
         }
         case J_region: {
-            const char* s = uj_str(D);
-            snprintf(s2ctx->region_s, sizeof(s2ctx->region_s), "%s", s);
-            s2ctx->region = D->str.crc;
-            switch( s2ctx->region ) {
-            case J_EU863: {
-                s2ctx->canTx  = s2e_canTxEU863;
+            const char* region_s = uj_str(D);
+            ujcrc_t region = D->str.crc;
+            switch( region ) {
+            case J_EU863: { // non-std obsolete naming
+                region = J_EU868;
+                region_s = "EU868";
+                // FALL THRU
+            }
+            case J_EU868: { // common region name
+                s2ctx->canTx  = s2e_canTxEU868;
                 s2ctx->txpow  = 16 * TXPOW_SCALE;
                 s2ctx->txpow2 = 27 * TXPOW_SCALE;
                 s2ctx->txpow2_freq[0] = 869400000;
@@ -983,25 +1003,44 @@ static int handle_router_config (s2ctx_t* s2ctx, ujdec_t* D) {
                 resetDC(s2ctx, 50);      // 2%
                 break;
             }
-            case J_AS923JP: {
+            case J_AS923JP: { // non-std obsolete naming
+                region = J_AS923_1;
+                region_s = "AS923-1";
+                // FALL THRU
+            }
+            case J_AS923_1: { // common region name
                 s2ctx->ccaEnabled = 1;
                 s2ctx->canTx = s2e_canTxPerChnlDC;
                 s2ctx->txpow = 13 * TXPOW_SCALE;
                 resetDC(s2ctx, 10);      // 10%
-
                 break;
             }
-            case J_US902: {
+            case J_US902: { // non-std obsolete naming
+                region = J_US915;
+                region_s = "US915";
+                // FALL THRU
+            }
+            case J_US915: { // common region name
+                s2ctx->txpow = 26 * TXPOW_SCALE;
+                break;
+            }
+            case J_AU915: {
                 s2ctx->txpow = 30 * TXPOW_SCALE;
                 break;
             }
+            default: {
+                LOG(MOD_S2E|WARNING, "Unrecognized region: %s - ignored", region_s);
+                s2ctx->txpow = 14 * TXPOW_SCALE;
+                region = 0;
+                break;
             }
+            }
+            snprintf(s2ctx->region_s, sizeof(s2ctx->region_s), "%s", region_s);
+            s2ctx->region = region;
             break;
         }
-        case J_max_eirp: {
-            // Generic device level max TX power - in general lower then what the GW can do
-            // Unless we get more specific limits we stick with that
-            default_txpow = (s2_t)(uj_num(D) * TXPOW_SCALE);
+        case J_max_eirp: { // Request a specific max value - see below for if it takes effect
+            max_eirp = (s2_t)(uj_num(D) * TXPOW_SCALE);
             break;
         }
         case J_MuxTime: {
@@ -1146,37 +1185,43 @@ static int handle_router_config (s2ctx_t* s2ctx, ujdec_t* D) {
     if( ccaDisabled   ) s2e_ccaDisabled   = ccaDisabled   & 2;
     if( dcDisabled    ) s2e_dcDisabled    = dcDisabled    & 2;
     if( dwellDisabled ) s2e_dwellDisabled = dwellDisabled & 2;
-    if( s2ctx->txpow == 0 ) {
-        // No region specific settings, go with device/builtin default
-        s2ctx->txpow = default_txpow;
+    if( max_eirp != 100*TXPOW_SCALE ) {
+        if( s2ctx->region==0 || max_eirp < s2ctx->txpow ) {
+            // If no region specified use max_eirp whatever the value
+            // If a region was specified (unknown region = 14dBm) then only allow lowering
+            s2ctx->txpow = max_eirp;
+        }
+        if( max_eirp < s2ctx->txpow2 ) {
+            s2ctx->txpow2 = max_eirp;
+        }
     }
     LOG(MOD_S2E|INFO, "Configuring for region: %s%s -- %F..%F",
         s2ctx->region_s, s2ctx->ccaEnabled ? " (CCA)":"", s2ctx->min_freq, s2ctx->max_freq);
-    if( log_shallLog(MOD_S2E|VERBOSE) ) {
+    if( log_shallLog(MOD_S2E|INFO) ) {
         for( int dr=0; dr<16; dr++ ) {
             int rps = s2ctx->dr_defs[dr];
             if( rps == RPS_ILLEGAL ) {
-                LOG(MOD_S2E|VERBOSE, "  DR%-2d undefined", dr);
+                LOG(MOD_S2E|INFO, "  DR%-2d undefined", dr);
             } else {
-                LOG(MOD_S2E|VERBOSE, "  DR%-2d %R %s", dr, rps, rps & RPS_DNONLY ? "(DN only)" : "");
+                LOG(MOD_S2E|INFO, "  DR%-2d %R %s", dr, rps, rps & RPS_DNONLY ? "(DN only)" : "");
             }
         }
-        LOG(MOD_S2E|VERBOSE,
+        LOG(MOD_S2E|INFO,
             "  TX power: %.1f dBm EIRP",
             s2ctx->txpow/(double)TXPOW_SCALE);
-        if( s2ctx->txpow2 ) {
-            LOG(MOD_S2E|VERBOSE, "            %.1f dBm EIRP for %F..%F",
+        if( s2ctx->txpow2_freq[0] ) {
+            LOG(MOD_S2E|INFO, "            %.1f dBm EIRP for %F..%F",
                 s2ctx->txpow2/(double)TXPOW_SCALE, s2ctx->txpow2_freq[0], s2ctx->txpow2_freq[1]);
         }
-        LOG(MOD_S2E|VERBOSE, "  %s list: %d entries", rt_joineui, jlistlen);
-        LOG(MOD_S2E|VERBOSE, "  NetID filter: %08X-%08X-%08X-%08X",
+        LOG(MOD_S2E|INFO, "  %s list: %d entries", rt_joineui, jlistlen);
+        LOG(MOD_S2E|INFO, "  NetID filter: %08X-%08X-%08X-%08X",
             s2e_netidFilter[3], s2e_netidFilter[2], s2e_netidFilter[1], s2e_netidFilter[0]);
-        LOG(MOD_S2E|VERBOSE, "  Dev/test settings: nocca=%d nodc=%d nodwell=%d",
+        LOG(MOD_S2E|INFO, "  Dev/test settings: nocca=%d nodc=%d nodwell=%d",
             (s2e_ccaDisabled!=0), (s2e_dcDisabled!=0), (s2e_dwellDisabled!=0));
     }
     if( (bcn.ctrl&0xF0) != 0 ) {
         // At least one beacon frequency was specified
-        LOG(MOD_S2E|VERBOSE, "Beaconing every %~T on %F(%d) @ DR%d (frame layout %d/%d/%d)",
+        LOG(MOD_S2E|INFO, "Beaconing every %~T on %F(%d) @ DR%d (frame layout %d/%d/%d)",
             BEACON_INTVL, bcn.freqs[0],
             (bcn.ctrl>>4), bcn.ctrl & 0xF,
             bcn.layout[0], bcn.layout[1], bcn.layout[2]);
@@ -1323,6 +1368,10 @@ void handle_dnmsg (s2ctx_t* s2ctx, ujdec_t* D) {
         case J_pdu: {
             uj_str(D);
             int xlen = D->str.len/2;
+            if( xlen > 255 ) {
+                uj_error(D, "TX pdu too large. Maximum is 255 bytes.");
+                return;
+            }
             u1_t* p = txq_reserveData(&s2ctx->txq, xlen);
             if( p == NULL ) {
                 uj_error(D, "Out of TX data space");
@@ -1375,7 +1424,7 @@ void handle_dnmsg (s2ctx_t* s2ctx, ujdec_t* D) {
             break;
         }
         case J_RX2Freq: {
-            check_dnfreq(s2ctx, D, &txjob->rx2freq, &txjob->dnchnl);
+            check_dnfreq(s2ctx, D, &txjob->rx2freq, &txjob->dnchnl2);
             flags |= 0x0800;
             break;
         }
@@ -1433,8 +1482,10 @@ void handle_dnmsg (s2ctx_t* s2ctx, ujdec_t* D) {
         txjob->txtime = ts_xtime2ustime(txjob->xtime);
     }
     else {
-        txjob->xtime += txjob->rxdelay * 1000000;
-        txjob->txtime = ts_xtime2ustime(txjob->xtime);
+        if( txjob->xtime != 0 ) {
+            txjob->xtime += txjob->rxdelay * 1000000;
+            txjob->txtime = ts_xtime2ustime(txjob->xtime);
+        }
         if( txjob->freq == 0 ) {
             // Switch over to RX2:
             //  class A (device class A/C) - no RX1 provided

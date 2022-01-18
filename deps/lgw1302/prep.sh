@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -29,7 +29,7 @@
 set -e
 cd $(dirname $0)
 
-lgwversion="V${lgwversion:-1.0.5}"
+lgwversion="V${lgwversion:-2.1.0}"
 
 if [[ ! -d git-repo ]]; then
     git clone https://github.com/Lora-net/sx1302_hal.git git-repo

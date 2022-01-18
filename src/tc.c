@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -125,6 +125,8 @@ static void tc_connect_muxs (tc_t* tc) {
     if( tlsmode == URI_TLS && !conn_setup_tls(&tc->ws, SYS_CRED_TC, SYS_CRED_REG, hostname) ) {
         goto errexit;
     }
+    LOG(MOD_TCE|VERBOSE, "Connecting to MUXS...");
+    log_flushIO();
     if( !ws_connect(&tc->ws, hostname, port, path) ) {
         LOG(MOD_TCE|ERROR, "Muxs connect failed - URI: ws%s://%s:%s%s", tlsmode==URI_TLS?"s":"", hostname, port, path);
         goto errexit;
@@ -132,7 +134,6 @@ static void tc_connect_muxs (tc_t* tc) {
     rt_setTimerCb(&tc->timeout, rt_micros_ahead(TC_TIMEOUT), tc_timeout);
     tc->ws.evcb = (evcb_t)tc_muxs_connection;
     tc->tstate = TC_MUXS_REQ_PEND;
-    LOG(MOD_TCE|VERBOSE, "Connecting to MUXS...");
     return;
 
  errexit:
@@ -322,6 +323,8 @@ void tc_start (tc_t* tc) {
         goto errexit;
     }
     tstate_err = TC_ERR_FAILED;
+    LOG(MOD_TCE|INFO, "Connecting to INFOS: %s", tcuri);
+    log_flushIO();
     if( !ws_connect(&tc->ws, hostname, port, "/router-info") ) {
         LOG(MOD_TCE|ERROR, "TC connect failed - URI: %s", tcuri);
         goto errexit;
@@ -329,7 +332,6 @@ void tc_start (tc_t* tc) {
     rt_setTimerCb(&tc->timeout, rt_seconds_ahead(TC_TIMEOUT), tc_timeout);
     tc->ws.evcb = (evcb_t)tc_info_request;
     tc->tstate = TC_INFOS_REQ_PEND;
-    LOG(MOD_TCE|INFO, "Connecting to INFOS: %s", tcuri);
     return;
  errexit:
     tc_done(tc, tstate_err);

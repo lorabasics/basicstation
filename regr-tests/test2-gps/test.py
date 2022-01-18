@@ -1,5 +1,5 @@
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -64,7 +64,11 @@ class TestMuxs(tu.Muxs):
             station = None
         os._exit(status)
 
+    async def handle_event(self, ws, msg):
+        logger.debug('EVENT: %r', msg)
+
     async def handle_alarm(self, ws, msg):
+        logger.debug('ALARM: %r', msg)
         text = msg['text']
         if 'GPS' in text:
             self.gpscnt += 1
@@ -103,9 +107,13 @@ async def test_start():
                 logger.debug('Writing GPGGA...')
                 fixquality = (i&4)*2  # 4x 0 then 4x 2
                 lat = b'00849.8387' if i&1 else b'00848.8387'
-                f.write(nmea_cksum(b'GPGGA,165848.000,4714.7671,N,%s,E,%d,9,1.01,480.0,M,48.0,M,0000,0000' % (lat, fixquality)))
-                logger.debug('Writing cmd.fifo...')
+                sentence = nmea_cksum(b'GPGGA,165848.000,4714.7671,N,%s,E,%d,9,1.01,480.0,M,48.0,M,0000,0000' % (lat, fixquality))
+                f.write(sentence)
+                logger.debug('Writing cmd.fifo: %s' % (sentence[:-2].decode('ascii'),))
                 c.write(b'{"msgtype":"alarm","text":"CMD test no.%d"}\n' % (i,))
+                sentence = nmea_cksum(b'GPGGA,165848.001,,,,,0,00,99.99,,,,,,')
+                f.write(sentence)
+                logger.debug('Writing cmd.fifo: %s' % (sentence[:-2].decode('ascii'),))
                 await asyncio.sleep(1)
     notok = 1
     logger.debug('gpscnt=%d gpsmove=%d gpsnofix=%d cmdcnt=%d' % (muxs.gpscnt, muxs.gpsmove, muxs.gpsnofix, muxs.cmdcnt))

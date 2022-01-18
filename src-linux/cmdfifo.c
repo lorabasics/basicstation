@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -97,7 +97,7 @@ static void fifo_read(aio_t* _aio) {
                 if( sendbuf.buf != NULL ) {
                     memcpy(sendbuf.buf, cmdline, i);
                     sendbuf.pos = i;
-                    LOG(INFO, "CMD sent: %.40s", cmdline);
+                    LOG(INFO, "CMD sent: %.40s%s", cmdline, i>40?"..":"");
                     (*TC->s2ctx.sendText)(&TC->s2ctx, &sendbuf);
                 } else {
                     err = "Not enough WS space to sent command";
@@ -105,9 +105,9 @@ static void fifo_read(aio_t* _aio) {
             } else {
                 err = "Command dropped - not connected right now";
             }
-            if( err )
-                LOG(ERROR,"%s: %.20s", err, cmdline);
-
+            if( err ) {
+                LOG(ERROR,"%s: %.20s%s", err, cmdline, i>20?"..":"");
+            }
             fill = n -= i+1;
             memcpy(cmdline, cmdline+i+1, n);
             i = 0;

@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -41,7 +41,8 @@
 #include "lgw/loragw_reg.h"
 #include "lgw/loragw_hal.h"
 #if defined(CFG_sx1302)
-#include "lgw/loragw_sx1302.h"
+#include "lgw/loragw_sx1302_timestamp.h"
+extern timestamp_counter_t counter_us; // from loragw_sx1302.c
 #endif // defined(CFG_sx1302)
 
 #define RAL_MAX_RXBURST 10
@@ -124,45 +125,54 @@ int ral_rps2sf (rps_t rps) {
 //  In this impl. we return the time the measurement took - smallest values are best values
 //
 int ral_getTimesync (u1_t pps_en, sL_t* last_xtime, timesync_t* timesync) {
-    u4_t pps_xticks;
+    static u4_t last_pps_xticks;
+    u4_t pps_xticks = 0;
+#if !defined(CFG_sx1302)
     if( pps_en ) {
         // First read last latched value - interval between time syncs needs to be >1s so that a PPS could have happened.
         // Read last latched value - when PPS occurred. If no PPS happened this returns
         // the time when LGW_GPS_EN was set to 1.
         lgw_get_trigcnt(&pps_xticks);
-#if defined(CFG_sx1302)
-        sx1302_gps_enable(false);
-#else
-        lgw_reg_w(LGW_GPS_EN, 0);       // PPS latch holds current
-#endif
+        // lgw1 has a single xtick register which is either PPS latched or free running.
+        // We temporarily disable PPS latching to obtain a free running xtick.
+        lgw_reg_w(LGW_GPS_EN, 0);  // PPS latch holds current
+
     }
+#endif
     ustime_t t0 = rt_getTime();
     u4_t xticks = 0;
+    // Obtain current free running xtick
 #if defined(CFG_sx1302)
-    lgw_get_instcnt(&xticks);
+    timestamp_counter_get(&counter_us, &xticks, &pps_xticks);
 #else
     lgw_get_trigcnt(&xticks);
 #endif
     ustime_t t1 = rt_getTime();
     sL_t d = (s4_t)(xticks - *last_xtime);
     if( d < 0 ) {
-        LOG(MOD_SYN|CRITICAL, "SX130X time sync roll over - no update for a long time!");
+        LOG(MOD_SYN|CRITICAL,
+            "SX130x time sync roll over - no update for a long time: xticks=0x%08x last_xtime=0x%lX",
+            xticks, *last_xtime);
         d += (sL_t)1<<32;
     }
     timesync->xtime = *last_xtime += d;
     timesync->ustime = (t0+t1)/2;
+    timesync->pps_xtime = 0; // Will be set if pps_en is set and valid PPS observation is available
     if( pps_en ) {
         // PPS latch will hold now current xticks
-#if defined(CFG_sx1302)
-        sx1302_gps_enable(true);
-#else
+#if !defined(CFG_sx1302)
         lgw_reg_w(LGW_GPS_EN, 1);
 #endif
-        timesync->pps_xtime = timesync->xtime + (s4_t)(pps_xticks - xticks);
-    } else {
-        // Signal no PPS
-        timesync->pps_xtime = 0;
+        // Catch behavior when PPS is lost:
+        //  - pps_xticks = 0 and pps_xticks = const are illegal PPS observations.
+        //  - Upper layer informed by timesync->pps_xtime = 0.
+        if( pps_xticks && last_pps_xticks != pps_xticks ) {
+            timesync->pps_xtime = timesync->xtime + (s4_t)(pps_xticks - xticks);
+            last_pps_xticks = pps_xticks;
+        }
     }
+    LOG(MOD_SYN|XDEBUG, "SYNC: ustime=0x%012lX (Q=%3d): xticks=0x%08x xtime=0x%lX - PPS: pps_xticks=0x%08x (%u) pps_xtime=0x%lX (pps_en=%d)",
+        timesync->ustime, (int)(t1-t0), xticks, timesync->xtime, pps_xticks, pps_xticks, timesync->pps_xtime, pps_en);
     return (int)(t1-t0);
 }
 
@@ -192,10 +202,15 @@ int ral_tx (txjob_t* txjob, s2ctx_t* s2ctx, int nocca) {
     struct lgw_pkt_tx_s pkt_tx;
     memset(&pkt_tx, 0, sizeof(pkt_tx));
 
+    pkt_tx.invert_pol = true;
+    pkt_tx.no_header  = false;
+
     if( txjob->preamble == 0 ) {
         if( txjob->txflags & TXFLAG_BCN ) {
             pkt_tx.tx_mode = ON_GPS;
             pkt_tx.preamble = 10;
+            pkt_tx.invert_pol = false;
+            pkt_tx.no_header  = true;
         } else {
             pkt_tx.tx_mode = TIMESTAMPED;
             pkt_tx.preamble = 8;
@@ -210,9 +225,7 @@ int ral_tx (txjob_t* txjob, s2ctx_t* s2ctx, int nocca) {
     pkt_tx.rf_chain   = 0;
     pkt_tx.rf_power   = (float)(txjob->txpow - txpowAdjust) / TXPOW_SCALE;
     pkt_tx.coderate   = CR_LORA_4_5;
-    pkt_tx.invert_pol = true;
     pkt_tx.no_crc     = !txjob->addcrc;
-    pkt_tx.no_header  = false;
     pkt_tx.size       = txjob->len;
     memcpy(pkt_tx.payload, &s2ctx->txq.txdata[txjob->off], pkt_tx.size);
 
@@ -260,6 +273,28 @@ void ral_txabort (u1_t txunit) {
 #endif
 }
 
+static void log_rawpkt(u1_t level, str_t msg, struct lgw_pkt_rx_s * pkt_rx) {
+    LOG(MOD_RAL|level, "%s[CRC %s] %^.3F %.2f/%.1f %R (mod=%d/dr=%d/bw=%d) xtick=%08x (%u) %d bytes: %64H",
+        msg,
+        pkt_rx->status == STAT_CRC_OK ? "OK"  : "FAIL",
+        pkt_rx->freq_hz,
+        pkt_rx->snr,
+#if defined(CFG_sx1302)
+        pkt_rx->rssis,
+#else
+        pkt_rx->rssi,
+#endif
+        ral_lgw2rps(pkt_rx),
+        pkt_rx->modulation,
+        pkt_rx->datarate,
+        pkt_rx->bandwidth,
+        pkt_rx->count_us,
+        pkt_rx->count_us,
+        pkt_rx->size,
+        pkt_rx->size, pkt_rx->payload
+    );
+}
+
 //ATTR_FASTCODE 
 static void rxpolling (tmr_t* tmr) {
     int rounds = 0;
@@ -273,23 +308,25 @@ static void rxpolling (tmr_t* tmr) {
         if( n==0 ) {
             break;
         }
-        LOG(XDEBUG, "RX mod=%s f=%d bw=%d sz=%d dr=%d %H", pkt_rx.modulation == 0x10 ? "LORA" : "FSK", pkt_rx.freq_hz, (int[]){0,500,250,125}[pkt_rx.bandwidth], pkt_rx.size, pkt_rx.datarate, pkt_rx.size, pkt_rx.payload);
 
         rxjob_t* rxjob = !TC ? NULL : s2e_nextRxjob(&TC->s2ctx);
         if( rxjob == NULL ) {
-            LOG(ERROR, "SX130X RX frame dropped - out of space");
+            log_rawpkt(ERROR, "Dropped RX frame - out of space: ", &pkt_rx);
             break; // Allow to flush RX jobs
         }
         if( pkt_rx.status != STAT_CRC_OK ) {
-            LOG(XDEBUG, "Dropped frame without CRC or with broken CRC");
+            if( log_shallLog(MOD_RAL|DEBUG) ) {
+                log_rawpkt(DEBUG, "", &pkt_rx);
+            }
             continue; // silently ignore bad CRC
         }
         if( pkt_rx.size > MAX_RXFRAME_LEN ) {
             // This should not happen since caller provides
             // space for max frame length - 255 bytes
-            LOG(MOD_RAL|ERROR, "Frame size (%d) exceeds offered buffer (%d)", pkt_rx.size, MAX_RXFRAME_LEN);
+            log_rawpkt(ERROR, "Dropped RX frame - frame size too large: ", &pkt_rx);
             continue;
         }
+
         memcpy(&TC->s2ctx.rxq.rxdata[rxjob->off], pkt_rx.payload, pkt_rx.size);
         rxjob->len   = pkt_rx.size;
         rxjob->freq  = pkt_rx.freq_hz;
@@ -303,9 +340,14 @@ static void rxpolling (tmr_t* tmr) {
         rps_t rps = ral_lgw2rps(&pkt_rx);
         rxjob->dr = s2e_rps2dr(&TC->s2ctx, rps);
         if( rxjob->dr == DR_ILLEGAL ) {
-            LOG(MOD_RAL|ERROR, "Unable to map to an up DR: %R", rps);
+            log_rawpkt(ERROR, "Dropped RX frame - unable to map to an up DR: ", &pkt_rx);
             continue;
         }
+
+        if( log_shallLog(MOD_RAL|XDEBUG) ) {
+            log_rawpkt(XDEBUG, "", &pkt_rx);
+        }
+
         s2e_addRxjob(&TC->s2ctx, rxjob);
 
     }
@@ -367,10 +409,10 @@ void ral_ini() {
 }
 
 void ral_stop() {
-    lgw_stop();
+    rt_clrTimer(&syncTmr);
     last_xtime = 0;
     rt_clrTimer(&rxpollTmr);
-    rt_clrTimer(&syncTmr);
+    lgw_stop();
 }
 
 #endif // defined(CFG_ral_lgw)

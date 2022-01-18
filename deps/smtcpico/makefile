@@ -1,5 +1,5 @@
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -35,8 +35,10 @@ LGWVERSION.default = 0.2.2
 LGWVERSION ?= $(or ${LGWVERSION.${platform}}, ${LGWVERSION.default})
 
 HFILES = $(wildcard ${PLT}/libloragw/inc/*.h)
-SRCS = $(wildcard ${PLT}/libloragw/inc/*.c)
+SRCS = $(wildcard ${PLT}/libloragw/src/*.c)
 ARTEFACTS = ${LGWLIB} ${LGWINC} $(patsubst %, ${LGWINC}/%, $(notdir ${HFILES}) config.h)
+
+LGW_EXTRA_CFLAGS = -DSTATIONLOG  # Enable station log integration
 
 all: $(if ${HFILES},${ARTEFACTS},${PLT})
 
@@ -49,10 +51,10 @@ ${LGWLIB}: ${PLT}/libloragw/libloragw.a
 	@cp $< $@
 
 ${PLT}/libloragw/libloragw.a: ${SRCS} ${HFILES}
-	${MAKE} -C ${PLT}/libloragw libloragw.a CC=${CC} AR=${AR} LD=${LD} TDfull=${TDfull}
+	${MAKE} -C ${PLT}/libloragw libloragw.a CC="${CC}" AR="${AR}" LD="${LD}" TDfull="${TDfull}" EXTRA_CFLAGS="${LGW_EXTRA_CFLAGS}"
 
 ${PLT}/libloragw/inc/config.h: ${PLT}/libloragw/library.cfg
-	${MAKE} -C ${PLT}/libloragw inc/config.h CC=${CC} AR=${AR} LD=${LD} TDfull=${TDfull}
+	${MAKE} -C ${PLT}/libloragw inc/config.h CC="${CC}" AR="${AR}" LD="${LD}" TDfull="${TDfull}"
 
 ${LGWINC}/%.h: ${PLT}/libloragw/inc/%.h | ${LGWINC}
 	@echo "  CP    ${<F} -> $@"

@@ -1,15 +1,20 @@
 diff --git a/libloragw/Makefile b/libloragw/Makefile
-index 53c33d9..a8a09a2 100644
+index 53c33d9..cc7d016 100644
 --- a/libloragw/Makefile
 +++ b/libloragw/Makefile
-@@ -7,6 +7,7 @@ include library.cfg
-
+@@ -7,10 +7,12 @@ include library.cfg
+ 
  ARCH ?=
  CROSS_COMPILE ?=
 +
  CC := $(CROSS_COMPILE)gcc
  AR := $(CROSS_COMPILE)ar
-
+ 
+ CFLAGS := -O2 -Wall -Wextra -std=c99 -Iinc -I.
++CFLAGS += ${EXTRA_CFLAGS}
+ 
+ OBJDIR = obj
+ INCLUDES = $(wildcard inc/*.h)
 diff --git a/libloragw/inc/loragw_hal.h b/libloragw/inc/loragw_hal.h
 index d5f9ade..57927c4 100644
 --- a/libloragw/inc/loragw_hal.h
@@ -17,7 +22,7 @@ index d5f9ade..57927c4 100644
 @@ -414,6 +414,12 @@ const char* lgw_version_info(void);
  */
  uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet);
-
+ 
 +extern uint8_t lgwx_device_mode;
 +extern uint8_t lgwx_beacon_len;
 +extern uint8_t lgwx_beacon_sf;
@@ -25,109 +30,1070 @@ index d5f9ade..57927c4 100644
 +enum { LGWX_LBT_MODE_DFLT=0, LGWX_LBT_MODE_OFF = 1 };
 +
  #endif
-
+ 
  /* --- EOF ------------------------------------------------------------------ */
+diff --git a/libloragw/inc/loragw_stationlog.h b/libloragw/inc/loragw_stationlog.h
+new file mode 100644
+index 0000000..a282b8f
+--- /dev/null
++++ b/libloragw/inc/loragw_stationlog.h
+@@ -0,0 +1,26 @@
++#ifndef _LORAGW_STATIONLOG_H
++#define _LORAGW_STATIONLOG_H
++
++#if defined(STATIONLOG)
++
++#undef DEBUG_PRINTF
++#undef DEBUG_MSG
++
++enum { XDEBUG=0, DEBUG, VERBOSE, INFO, NOTICE, WARNING, ERROR, CRITICAL };
++extern void log_hal (uint8_t level, const char* fmt, ...);
++#define ERROR_PRINTF(fmt, ...)     log_hal(ERROR  , "[%s:%d] "fmt, __FUNCTION__, __LINE__, ## __VA_ARGS__)
++#define INFO_PRINTF(fmt, ...)      log_hal(INFO   , "[%s:%d] "fmt, __FUNCTION__, __LINE__, ## __VA_ARGS__)
++#define DEBUG_PRINTF(fmt, ...)     log_hal(XDEBUG , "[%s:%d] "fmt, __FUNCTION__, __LINE__, ## __VA_ARGS__)
++#define DEBUG_MSG(str)             log_hal(XDEBUG , "[%s:%d] %s", __FUNCTION__, __LINE__, str)
++#define XDEBUG_PRINTF(fmt, ...)    log_hal(XDEBUG , "[%s:%d] "fmt, __FUNCTION__, __LINE__, ## __VA_ARGS__)
++#define XDEBUG_MSG(str)            log_hal(XDEBUG , "[%s:%d] %s", __FUNCTION__, __LINE__, str)
++
++#else // !defined(STATIONLOG)
++
++#define ERROR_PRINTF(fmt, ...)     DEBUG_PRINTF(fmt, ## __VA_ARGS__)
++#define INFO_PRINTF(fmt, ...)      DEBUG_PRINTF(fmt, ## __VA_ARGS__)
++#define XDEBUG_PRINTF(fmt, ...)    DEBUG_PRINTF(fmt, ## __VA_ARGS__)
++#define XDEBUG_MSG(str)            DEBUG_MSG(str)
++#endif
++
++#endif
+diff --git a/libloragw/src/loragw_fpga.c b/libloragw/src/loragw_fpga.c
+index 465f43e..9b98786 100644
+--- a/libloragw/src/loragw_fpga.c
++++ b/libloragw/src/loragw_fpga.c
+@@ -43,6 +43,8 @@ Maintainer: Michael Coracin
+     #define CHECK_NULL(a)                if(a==NULL){return LGW_REG_ERROR;}
+ #endif
+ 
++#include "loragw_stationlog.h"
++
+ /* -------------------------------------------------------------------------- */
+ /* --- PRIVATE CONSTANTS ---------------------------------------------------- */
+ 
+@@ -140,21 +142,16 @@ int lgw_fpga_configure(uint32_t tx_notch_freq) {
+     }
+ 
+     /* Get supported FPGA features */
+-    printf("INFO: FPGA supported features:");
+     lgw_fpga_reg_r(LGW_FPGA_FEATURE, &val);
+     tx_notch_support = TAKE_N_BITS_FROM((uint8_t)val, 0, 1);
+-    if (tx_notch_support == true) {
+-        printf(" [TX filter] ");
+-    }
+     spectral_scan_support = TAKE_N_BITS_FROM((uint8_t)val, 1, 1);
+-    if (spectral_scan_support == true) {
+-        printf(" [Spectral Scan] ");
+-    }
+     lbt_support = TAKE_N_BITS_FROM((uint8_t)val, 2, 1);
+-    if (lbt_support == true) {
+-        printf(" [LBT] ");
+-    }
+-    printf("\n");
++
++    INFO_PRINTF("INFO: FPGA supported features: %s%s%s",
++        tx_notch_support ? " [TX filter] " : "",
++        spectral_scan_support ? " [Spectral Scan] " : "",
++        lbt_support ? " [lbt_support] " : ""
++    );
+ 
+     x  = lgw_fpga_reg_w(LGW_FPGA_CTRL_INPUT_SYNC_I, 1);
+     x |= lgw_fpga_reg_w(LGW_FPGA_CTRL_INPUT_SYNC_Q, 1);
+diff --git a/libloragw/src/loragw_gps.c b/libloragw/src/loragw_gps.c
+index c0e0ded..14eff6e 100644
+--- a/libloragw/src/loragw_gps.c
++++ b/libloragw/src/loragw_gps.c
+@@ -39,16 +39,20 @@ Maintainer: Michael Coracin
+ 
+ #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+ #if DEBUG_GPS == 1
+-    #define DEBUG_MSG(args...)  fprintf(stderr, args)
++    #define DEBUG_MSG(str)                fprintf(stderr, str)
++    #define DEBUG_PRINTF(fmt, args...)    fprintf(stderr,"%s:%d: "fmt, __FUNCTION__, __LINE__, args)
+     #define DEBUG_ARRAY(a,b,c)  for(a=0;a<b;++a) fprintf(stderr,"%x.",c[a]);fprintf(stderr,"end\n")
+     #define CHECK_NULL(a)       if(a==NULL){fprintf(stderr,"%s:%d: ERROR: NULL POINTER AS ARGUMENT\n", __FUNCTION__, __LINE__);return LGW_GPS_ERROR;}
+ #else
+-    #define DEBUG_MSG(args...)
++    #define DEBUG_MSG(str)
++    #define DEBUG_PRINTF(fmt, args...)
+     #define DEBUG_ARRAY(a,b,c)  for(a=0;a!=0;){}
+     #define CHECK_NULL(a)       if(a==NULL){return LGW_GPS_ERROR;}
+ #endif
+ #define TRACE()         fprintf(stderr, "@ %s %d\n", __FUNCTION__, __LINE__);
+ 
++#include "loragw_stationlog.h"
++
+ /* -------------------------------------------------------------------------- */
+ /* --- PRIVATE CONSTANTS ---------------------------------------------------- */
+ 
+@@ -186,7 +190,7 @@ static bool validate_nmea_checksum(const char *serial_buff, int buff_size) {
+     if ((serial_buff[checksum_index] == checksum[0]) && (serial_buff[checksum_index+1] == checksum[1])) {
+         return true;
+     } else {
+-        DEBUG_MSG("ERROR: NMEA CHECKSUM %c%c DOESN'T MATCH VERIFICATION CHECKSUM %c%c\n", serial_buff[checksum_index], serial_buff[checksum_index+1], checksum[0], checksum[1]);
++        DEBUG_PRINTF("ERROR: NMEA CHECKSUM %c%c DOESN'T MATCH VERIFICATION CHECKSUM %c%c\n", serial_buff[checksum_index], serial_buff[checksum_index+1], checksum[0], checksum[1]);
+         return false;
+     }
+ }
+@@ -352,7 +356,7 @@ int lgw_gps_enable(char *tty_path, char *gps_family, speed_t target_brate, int *
+     /* This is a binary message, serial port has to be properly configured to handle this */
+     num_written = write (gps_tty_dev, ubx_cmd_timegps, UBX_MSG_NAVTIMEGPS_LEN);
+     if (num_written != UBX_MSG_NAVTIMEGPS_LEN) {
+-        DEBUG_MSG("ERROR: Failed to write on serial port (written=%d)\n", (int) num_written);
++        DEBUG_PRINTF("ERROR: Failed to write on serial port (written=%d)\n", (int) num_written);
+     }
+ 
+     /* get timezone info */
+@@ -409,11 +413,15 @@ enum gps_msg lgw_parse_ubx(const char *serial_buff, size_t buff_size, size_t *ms
+     }
+ 
+     /* display received serial data and checksum */
++#if defined(STATIONLOG)
++    DEBUG_PRINTF("Note: parsing UBX frame> %H", buff_size, serial_buff);
++#else
+     DEBUG_MSG("Note: parsing UBX frame> ");
+     for (i=0; i<buff_size; i++) {
+-        DEBUG_MSG("%02x ", serial_buff[i]);
++        DEBUG_PRINTF("%02x ", serial_buff[i]);
+     }
+     DEBUG_MSG("\n");
++#endif
+ 
+     /* Check for UBX sync chars 0xB5 0x62 */
+     if ((serial_buff[0] == (char)0xB5) && (serial_buff[1] == (char)0x62)) {
+@@ -484,7 +492,7 @@ enum gps_msg lgw_parse_ubx(const char *serial_buff, size_t buff_size, size_t *ms
+                     DEBUG_MSG("NOTE: UBX ACK-ACK received\n");
+                     return IGNORED;
+                 } else { /* not a supported message */
+-                    DEBUG_MSG("ERROR: UBX message is not supported (%02x %02x)\n", serial_buff[2], serial_buff[3]);
++                    DEBUG_PRINTF("ERROR: UBX message is not supported (%02x %02x)\n", serial_buff[2], serial_buff[3]);
+                     return IGNORED;
+                 }
+             } else { /* checksum failed */
+@@ -550,15 +558,15 @@ enum gps_msg lgw_parse_nmea(const char *serial_buff, int buff_size) {
+         if ((i == 4) && (j == 3)) {
+             if ((gps_mod == 'A') || (gps_mod == 'D')) {
+                 gps_time_ok = true;
+-                DEBUG_MSG("Note: Valid RMC sentence, GPS locked, date: 20%02d-%02d-%02dT%02d:%02d:%06.3fZ\n", gps_yea, gps_mon, gps_day, gps_hou, gps_min, gps_fra + (float)gps_sec);
++                DEBUG_PRINTF("Note: Valid RMC sentence, GPS locked, date: 20%02d-%02d-%02dT%02d:%02d:%06.3fZ\n", gps_yea, gps_mon, gps_day, gps_hou, gps_min, gps_fra + (float)gps_sec);
+             } else {
+                 gps_time_ok = false;
+-                DEBUG_MSG("Note: Valid RMC sentence, no satellite fix, estimated date: 20%02d-%02d-%02dT%02d:%02d:%06.3fZ\n", gps_yea, gps_mon, gps_day, gps_hou, gps_min, gps_fra + (float)gps_sec);
++                DEBUG_PRINTF("Note: Valid RMC sentence, no satellite fix, estimated date: 20%02d-%02d-%02dT%02d:%02d:%06.3fZ\n", gps_yea, gps_mon, gps_day, gps_hou, gps_min, gps_fra + (float)gps_sec);
+             }
+         } else {
+             /* could not get a valid hour AND date */
+             gps_time_ok = false;
+-            DEBUG_MSG("Note: Valid RMC sentence, mode %c, no date\n", gps_mod);
++            DEBUG_PRINTF("Note: Valid RMC sentence, mode %c, no date\n", gps_mod);
+         }
+         return NMEA_RMC;
+     } else if (match_label(serial_buff, "$G?GGA", 6, '?')) {
+@@ -583,11 +591,11 @@ enum gps_msg lgw_parse_nmea(const char *serial_buff, int buff_size) {
+         k = sscanf(parser_buf + str_index[9], "%hd", &gps_alt);
+         if ((i == 2) && (j == 2) && (k == 1) && ((gps_ola=='N')||(gps_ola=='S')) && ((gps_olo=='E')||(gps_olo=='W'))) {
+             gps_pos_ok = true;
+-            DEBUG_MSG("Note: Valid GGA sentence, %d sat, lat %02ddeg %06.3fmin %c, lon %03ddeg%06.3fmin %c, alt %d\n", gps_sat, gps_dla, gps_mla, gps_ola, gps_dlo, gps_mlo, gps_olo, gps_alt);
++            DEBUG_PRINTF("Note: Valid GGA sentence, %d sat, lat %02ddeg %06.3fmin %c, lon %03ddeg%06.3fmin %c, alt %d\n", gps_sat, gps_dla, gps_mla, gps_ola, gps_dlo, gps_mlo, gps_olo, gps_alt);
+         } else {
+             /* could not get a valid latitude, longitude AND altitude */
+             gps_pos_ok = false;
+-            DEBUG_MSG("Note: Valid GGA sentence, %d sat, no coordinates\n", gps_sat);
++            DEBUG_PRINTF("Note: Valid GGA sentence, %d sat, no coordinates\n", gps_sat);
+         }
+         return NMEA_GGA;
+     } else {
 diff --git a/libloragw/src/loragw_hal.c b/libloragw/src/loragw_hal.c
-index 8103751..d3ec1fb 100644
+index 8103751..5fdb775 100644
 --- a/libloragw/src/loragw_hal.c
 +++ b/libloragw/src/loragw_hal.c
-@@ -226,11 +226,18 @@ int load_firmware(uint8_t target, uint8_t *firmware, uint16_t size) {
-
+@@ -47,6 +47,8 @@ Maintainer: Sylvain Miermont
+     #define CHECK_NULL(a)                 if(a==NULL){return LGW_HAL_ERROR;}
+ #endif
+ 
++#include "loragw_stationlog.h"
++
+ #define IF_HZ_TO_REG(f)     (f << 5)/15625
+ #define SET_PPM_ON(bw,dr)   (((bw == BW_125KHZ) && ((dr == DR_LORA_SF11) || (dr == DR_LORA_SF12))) || ((bw == BW_250KHZ) && (dr == DR_LORA_SF12)))
+ #define TRACE()             fprintf(stderr, "@ %s %d\n", __FUNCTION__, __LINE__);
+@@ -183,20 +185,20 @@ int load_firmware(uint8_t target, uint8_t *firmware, uint16_t size) {
+     CHECK_NULL(firmware);
+     if (target == MCU_ARB) {
+         if (size != MCU_ARB_FW_BYTE) {
+-            DEBUG_MSG("ERROR: NOT A VALID SIZE FOR MCU ARG FIRMWARE\n");
++            ERROR_PRINTF("NOT A VALID SIZE FOR MCU ARG FIRMWARE\n");
+             return -1;
+         }
+         reg_rst = LGW_MCU_RST_0;
+         reg_sel = LGW_MCU_SELECT_MUX_0;
+     }else if (target == MCU_AGC) {
+         if (size != MCU_AGC_FW_BYTE) {
+-            DEBUG_MSG("ERROR: NOT A VALID SIZE FOR MCU AGC FIRMWARE\n");
++            ERROR_PRINTF("NOT A VALID SIZE FOR MCU AGC FIRMWARE\n");
+             return -1;
+         }
+         reg_rst = LGW_MCU_RST_1;
+         reg_sel = LGW_MCU_SELECT_MUX_1;
+     } else {
+-        DEBUG_MSG("ERROR: NOT A VALID TARGET FOR LOADING FIRMWARE\n");
++        ERROR_PRINTF("NOT A VALID TARGET FOR LOADING FIRMWARE\n");
+         return -1;
+     }
+ 
+@@ -214,7 +216,7 @@ int load_firmware(uint8_t target, uint8_t *firmware, uint16_t size) {
+     lgw_reg_r( LGW_MCU_PROM_DATA, &dummy ); /* bug workaround */
+     lgw_reg_rb( LGW_MCU_PROM_DATA, fw_check, size );
+     if (memcmp(firmware, fw_check, size) != 0) {
+-        printf ("ERROR: Failed to load fw %d\n", (int)target);
++        ERROR_PRINTF("Failed to load fw %d\n", (int)target);
+         return -1;
+     }
+ 
+@@ -226,11 +228,18 @@ int load_firmware(uint8_t target, uint8_t *firmware, uint16_t size) {
+ 
  /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
+ 
 +uint8_t lgwx_device_mode = 0;
 +uint8_t lgwx_beacon_len = 0;
 +uint8_t lgwx_beacon_sf = 0;
 +uint8_t lgwx_lbt_mode = 0;
 +
  void lgw_constant_adjust(void) {
-
+ 
      /* I/Q path setup */
      // lgw_reg_w(LGW_RX_INVERT_IQ,0); /* default 0 */
      // lgw_reg_w(LGW_MODEM_INVERT_IQ,1); /* default 1 */
 +    if( lgwx_device_mode )
-+	lgw_reg_w(LGW_MODEM_INVERT_IQ,0);
++        lgw_reg_w(LGW_MODEM_INVERT_IQ,0);
      // lgw_reg_w(LGW_CHIRP_INVERT_RX,1); /* default 1 */
      // lgw_reg_w(LGW_RX_EDGE_SELECT,0); /* default 0 */
      // lgw_reg_w(LGW_MBWSSF_MODEM_INVERT_IQ,0); /* default 0 */
-@@ -280,6 +287,8 @@ void lgw_constant_adjust(void) {
-
+@@ -280,6 +289,8 @@ void lgw_constant_adjust(void) {
+ 
      // lgw_reg_w(LGW_PREAMBLE_FINE_TIMING_GAIN,1); /* default 1 */
      // lgw_reg_w(LGW_ONLY_CRC_EN,1); /* default 1 */
 +    if( lgwx_device_mode )
-+	lgw_reg_w(LGW_ONLY_CRC_EN,0);
++        lgw_reg_w(LGW_ONLY_CRC_EN,0);
      // lgw_reg_w(LGW_PAYLOAD_FINE_TIMING_GAIN,2); /* default 2 */
      // lgw_reg_w(LGW_TRACKING_INTEGRAL,0); /* default 0 */
      // lgw_reg_w(LGW_ADJUST_MODEM_START_OFFSET_RDX8,0); /* default 0 */
-@@ -300,11 +309,24 @@ void lgw_constant_adjust(void) {
+@@ -300,11 +311,26 @@ void lgw_constant_adjust(void) {
          lgw_reg_w(LGW_MBWSSF_FRAME_SYNCH_PEAK2_POS,2); /* default 2 */
      }
      // lgw_reg_w(LGW_MBWSSF_ONLY_CRC_EN,1); /* default 1 */
 +    if( lgwx_device_mode )
-+	lgw_reg_w(LGW_MBWSSF_ONLY_CRC_EN,0);
++        lgw_reg_w(LGW_MBWSSF_ONLY_CRC_EN,0);
      // lgw_reg_w(LGW_MBWSSF_PAYLOAD_FINE_TIMING_GAIN,2); /* default 2 */
      // lgw_reg_w(LGW_MBWSSF_PREAMBLE_FINE_TIMING_GAIN,1); /* default 1 */
      // lgw_reg_w(LGW_MBWSSF_TRACKING_INTEGRAL,0); /* default 0 */
      // lgw_reg_w(LGW_MBWSSF_AGC_FREEZE_ON_DETECT,1); /* default 1 */
-
-+    if( lgwx_device_mode && lgwx_beacon_len ) {
-+	lgw_reg_w(LGW_MBWSSF_MODEM_INVERT_IQ,0);
-+	lgw_reg_w(LGW_MBWSSF_RATE_SF, lgwx_beacon_sf);
-+	lgw_reg_w(LGW_MBWSSF_IMPLICIT_HEADER,1); /* no header */
-+	lgw_reg_w(LGW_MBWSSF_IMPLICIT_CRC_EN,0);
-+	lgw_reg_w(LGW_MBWSSF_IMPLICIT_CODING_RATE,1);
-+	lgw_reg_w(LGW_MBWSSF_IMPLICIT_PAYLOAD_LENGHT, lgwx_beacon_len);
-+    } else {
-+	lgw_reg_w(LGW_MBWSSF_MODEM_INVERT_IQ,1); //XXX:? correct?
+ 
++    if( lgwx_device_mode ) {
++        if( lgwx_beacon_len != 0 ) {
++            lgw_reg_w(LGW_MBWSSF_MODEM_INVERT_IQ,0);
++            lgw_reg_w(LGW_MBWSSF_RATE_SF, lgwx_beacon_sf);
++            lgw_reg_w(LGW_MBWSSF_IMPLICIT_HEADER,1); /* no header */
++            lgw_reg_w(LGW_MBWSSF_IMPLICIT_CRC_EN,0);
++            lgw_reg_w(LGW_MBWSSF_IMPLICIT_CODING_RATE,1);
++            lgw_reg_w(LGW_MBWSSF_IMPLICIT_PAYLOAD_LENGHT, lgwx_beacon_len);
++        } else {
++            lgw_reg_w(LGW_MBWSSF_MODEM_INVERT_IQ,1); // Invert fast LoRa
++        }
 +    }
 +
      /* Improvement of reference clock frequency error tolerance */
      lgw_reg_w(LGW_ADJUST_MODEM_START_OFFSET_RDX4, 1); /* default 0 */
      lgw_reg_w(LGW_ADJUST_MODEM_START_OFFSET_SF12_RDX4, 4094); /* default 4092 */
-@@ -1452,6 +1474,11 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+@@ -404,7 +430,7 @@ uint16_t lgw_get_tx_start_delay(bool tx_notch_enable, uint8_t bw) {
+ 
+     tx_start_delay = (float)TX_START_DELAY_DEFAULT - bw_delay_us - notch_delay_us;
+ 
+-    printf("INFO: tx_start_delay=%u (%f) - (%u, bw_delay=%f, notch_delay=%f)\n", (uint16_t)tx_start_delay, tx_start_delay, TX_START_DELAY_DEFAULT, bw_delay_us, notch_delay_us);
++    DEBUG_PRINTF("INFO: tx_start_delay=%u (%f) - (%u, bw_delay=%f, notch_delay=%f)\n", (uint16_t)tx_start_delay, tx_start_delay, TX_START_DELAY_DEFAULT, bw_delay_us, notch_delay_us);
+ 
+     return (uint16_t)tx_start_delay; /* keep truncating instead of rounding: better behaviour measured */
+ }
+@@ -416,7 +442,7 @@ int lgw_board_setconf(struct lgw_conf_board_s conf) {
+ 
+     /* check if the concentrator is running */
+     if (lgw_is_started == true) {
+-        DEBUG_MSG("ERROR: CONCENTRATOR IS RUNNING, STOP IT BEFORE TOUCHING CONFIGURATION\n");
++        ERROR_PRINTF("CONCENTRATOR IS RUNNING, STOP IT BEFORE TOUCHING CONFIGURATION\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -436,13 +462,13 @@ int lgw_lbt_setconf(struct lgw_conf_lbt_s conf) {
+ 
+     /* check if the concentrator is running */
+     if (lgw_is_started == true) {
+-        DEBUG_MSG("ERROR: CONCENTRATOR IS RUNNING, STOP IT BEFORE TOUCHING CONFIGURATION\n");
++        ERROR_PRINTF("CONCENTRATOR IS RUNNING, STOP IT BEFORE TOUCHING CONFIGURATION\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+     x = lbt_setconf(&conf);
+     if (x != LGW_LBT_SUCCESS) {
+-        DEBUG_MSG("ERROR: Failed to configure concentrator for LBT\n");
++        ERROR_PRINTF("Failed to configure concentrator for LBT\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -455,19 +481,19 @@ int lgw_rxrf_setconf(uint8_t rf_chain, struct lgw_conf_rxrf_s conf) {
+ 
+     /* check if the concentrator is running */
+     if (lgw_is_started == true) {
+-        DEBUG_MSG("ERROR: CONCENTRATOR IS RUNNING, STOP IT BEFORE TOUCHING CONFIGURATION\n");
++        ERROR_PRINTF("CONCENTRATOR IS RUNNING, STOP IT BEFORE TOUCHING CONFIGURATION\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+     /* check input range (segfault prevention) */
+     if (rf_chain >= LGW_RF_CHAIN_NB) {
+-        DEBUG_MSG("ERROR: NOT A VALID RF_CHAIN NUMBER\n");
++        ERROR_PRINTF("NOT A VALID RF_CHAIN NUMBER\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+     /* check if radio type is supported */
+     if ((conf.type != LGW_RADIO_TYPE_SX1255) && (conf.type != LGW_RADIO_TYPE_SX1257)) {
+-        DEBUG_MSG("ERROR: NOT A VALID RADIO TYPE\n");
++        ERROR_PRINTF("NOT A VALID RADIO TYPE\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -498,13 +524,13 @@ int lgw_rxif_setconf(uint8_t if_chain, struct lgw_conf_rxif_s conf) {
+ 
+     /* check if the concentrator is running */
+     if (lgw_is_started == true) {
+-        DEBUG_MSG("ERROR: CONCENTRATOR IS RUNNING, STOP IT BEFORE TOUCHING CONFIGURATION\n");
++        ERROR_PRINTF("CONCENTRATOR IS RUNNING, STOP IT BEFORE TOUCHING CONFIGURATION\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+     /* check input range (segfault prevention) */
+     if (if_chain >= LGW_IF_CHAIN_NB) {
+-        DEBUG_PRINTF("ERROR: %d NOT A VALID IF_CHAIN NUMBER\n", if_chain);
++        ERROR_PRINTF("%d NOT A VALID IF_CHAIN NUMBER\n", if_chain);
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -518,10 +544,10 @@ int lgw_rxif_setconf(uint8_t if_chain, struct lgw_conf_rxif_s conf) {
+ 
+     /* check 'general' parameters */
+     if (ifmod_config[if_chain] == IF_UNDEFINED) {
+-        DEBUG_PRINTF("ERROR: IF CHAIN %d NOT CONFIGURABLE\n", if_chain);
++        ERROR_PRINTF("IF CHAIN %d NOT CONFIGURABLE\n", if_chain);
+     }
+     if (conf.rf_chain >= LGW_RF_CHAIN_NB) {
+-        DEBUG_MSG("ERROR: INVALID RF_CHAIN TO ASSOCIATE WITH A LORA_STD IF CHAIN\n");
++        ERROR_PRINTF("INVALID RF_CHAIN TO ASSOCIATE WITH A LORA_STD IF CHAIN\n");
+         return LGW_HAL_ERROR;
+     }
+     /* check if IF frequency is optimal based on channel and radio bandwidths */
+@@ -539,10 +565,10 @@ int lgw_rxif_setconf(uint8_t if_chain, struct lgw_conf_rxif_s conf) {
+     }
+     bw_hz = lgw_bw_getval(conf.bandwidth); /* channel bandwidth */
+     if ((conf.freq_hz + ((bw_hz==-1)?LGW_REF_BW:bw_hz)/2) > ((int32_t)rf_rx_bandwidth/2)) {
+-        DEBUG_PRINTF("ERROR: IF FREQUENCY %d TOO HIGH\n", conf.freq_hz);
++        ERROR_PRINTF("IF FREQUENCY %d TOO HIGH\n", conf.freq_hz);
+         return LGW_HAL_ERROR;
+     } else if ((conf.freq_hz - ((bw_hz==-1)?LGW_REF_BW:bw_hz)/2) < -((int32_t)rf_rx_bandwidth/2)) {
+-        DEBUG_PRINTF("ERROR: IF FREQUENCY %d TOO LOW\n", conf.freq_hz);
++        ERROR_PRINTF("IF FREQUENCY %d TOO LOW\n", conf.freq_hz);
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -559,11 +585,11 @@ int lgw_rxif_setconf(uint8_t if_chain, struct lgw_conf_rxif_s conf) {
+             }
+             /* check BW & DR */
+             if (!IS_LORA_BW(conf.bandwidth)) {
+-                DEBUG_MSG("ERROR: BANDWIDTH NOT SUPPORTED BY LORA_STD IF CHAIN\n");
++                ERROR_PRINTF("BANDWIDTH NOT SUPPORTED BY LORA_STD IF CHAIN\n");
+                 return LGW_HAL_ERROR;
+             }
+             if (!IS_LORA_STD_DR(conf.datarate)) {
+-                DEBUG_MSG("ERROR: DATARATE NOT SUPPORTED BY LORA_STD IF CHAIN\n");
++                ERROR_PRINTF("DATARATE NOT SUPPORTED BY LORA_STD IF CHAIN\n");
+                 return LGW_HAL_ERROR;
+             }
+             /* set internal configuration  */
+@@ -591,11 +617,11 @@ int lgw_rxif_setconf(uint8_t if_chain, struct lgw_conf_rxif_s conf) {
+             }
+             /* check BW & DR */
+             if (conf.bandwidth != BW_125KHZ) {
+-                DEBUG_MSG("ERROR: BANDWIDTH NOT SUPPORTED BY LORA_MULTI IF CHAIN\n");
++                ERROR_PRINTF("BANDWIDTH NOT SUPPORTED BY LORA_MULTI IF CHAIN\n");
+                 return LGW_HAL_ERROR;
+             }
+             if (!IS_LORA_MULTI_DR(conf.datarate)) {
+-                DEBUG_MSG("ERROR: DATARATE(S) NOT SUPPORTED BY LORA_MULTI IF CHAIN\n");
++                ERROR_PRINTF("DATARATE(S) NOT SUPPORTED BY LORA_MULTI IF CHAIN\n");
+                 return LGW_HAL_ERROR;
+             }
+             /* set internal configuration  */
+@@ -617,11 +643,11 @@ int lgw_rxif_setconf(uint8_t if_chain, struct lgw_conf_rxif_s conf) {
+             }
+             /* check BW & DR */
+             if(!IS_FSK_BW(conf.bandwidth)) {
+-                DEBUG_MSG("ERROR: BANDWIDTH NOT SUPPORTED BY FSK IF CHAIN\n");
++                ERROR_PRINTF("BANDWIDTH NOT SUPPORTED BY FSK IF CHAIN\n");
+                 return LGW_HAL_ERROR;
+             }
+             if(!IS_FSK_DR(conf.datarate)) {
+-                DEBUG_MSG("ERROR: DATARATE NOT SUPPORTED BY FSK IF CHAIN\n");
++                ERROR_PRINTF("DATARATE NOT SUPPORTED BY FSK IF CHAIN\n");
+                 return LGW_HAL_ERROR;
+             }
+             /* set internal configuration  */
+@@ -638,7 +664,7 @@ int lgw_rxif_setconf(uint8_t if_chain, struct lgw_conf_rxif_s conf) {
+             break;
+ 
+         default:
+-            DEBUG_PRINTF("ERROR: IF CHAIN %d TYPE NOT SUPPORTED\n", if_chain);
++            ERROR_PRINTF("IF CHAIN %d TYPE NOT SUPPORTED\n", if_chain);
+             return LGW_HAL_ERROR;
+     }
+ 
+@@ -652,7 +678,7 @@ int lgw_txgain_setconf(struct lgw_tx_gain_lut_s *conf) {
+ 
+     /* Check LUT size */
+     if ((conf->size < 1) || (conf->size > TX_GAIN_LUT_SIZE_MAX)) {
+-        DEBUG_PRINTF("ERROR: TX gain LUT must have at least one entry and  maximum %d entries\n", TX_GAIN_LUT_SIZE_MAX);
++        ERROR_PRINTF("TX gain LUT must have at least one entry and  maximum %d entries\n", TX_GAIN_LUT_SIZE_MAX);
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -661,22 +687,22 @@ int lgw_txgain_setconf(struct lgw_tx_gain_lut_s *conf) {
+     for (i = 0; i < txgain_lut.size; i++) {
+         /* Check gain range */
+         if (conf->lut[i].dig_gain > 3) {
+-            DEBUG_MSG("ERROR: TX gain LUT: SX1301 digital gain must be between 0 and 3\n");
++            ERROR_PRINTF("TX gain LUT: SX1301 digital gain must be between 0 and 3\n");
+             return LGW_HAL_ERROR;
+         }
+         if (conf->lut[i].dac_gain != 3) {
+-            DEBUG_MSG("ERROR: TX gain LUT: SX1257 DAC gains != 3 are not supported\n");
++            ERROR_PRINTF("TX gain LUT: SX1257 DAC gains != 3 are not supported\n");
+             return LGW_HAL_ERROR;
+         }
+         if (conf->lut[i].mix_gain > 15) {
+-            DEBUG_MSG("ERROR: TX gain LUT: SX1257 mixer gain must not exceed 15\n");
++            ERROR_PRINTF("TX gain LUT: SX1257 mixer gain must not exceed 15\n");
+             return LGW_HAL_ERROR;
+         } else if (conf->lut[i].mix_gain < 8) {
+-            DEBUG_MSG("ERROR: TX gain LUT: SX1257 mixer gains < 8 are not supported\n");
++            ERROR_PRINTF("TX gain LUT: SX1257 mixer gains < 8 are not supported\n");
+             return LGW_HAL_ERROR;
+         }
+         if (conf->lut[i].pa_gain > 3) {
+-            DEBUG_MSG("ERROR: TX gain LUT: External PA gain must not exceed 3\n");
++            ERROR_PRINTF("TX gain LUT: External PA gain must not exceed 3\n");
+             return LGW_HAL_ERROR;
+         }
+ 
+@@ -713,7 +739,7 @@ int lgw_start(void) {
+ 
+     reg_stat = lgw_connect(false, rf_tx_notch_freq[rf_tx_enable[1]?1:0]);
+     if (reg_stat == LGW_REG_ERROR) {
+-        DEBUG_MSG("ERROR: FAIL TO CONNECT BOARD\n");
++        ERROR_PRINTF("FAIL TO CONNECT BOARD\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -735,12 +761,12 @@ int lgw_start(void) {
+     /* setup the radios */
+     err = lgw_setup_sx125x(0, rf_clkout, rf_enable[0], rf_radio_type[0], rf_rx_freq[0]);
+     if (err != 0) {
+-        DEBUG_MSG("ERROR: Failed to setup sx125x radio for RF chain 0\n");
++        ERROR_PRINTF("Failed to setup sx125x radio for RF chain 0\n");
+         return LGW_HAL_ERROR;
+     }
+     err = lgw_setup_sx125x(1, rf_clkout, rf_enable[1], rf_radio_type[1], rf_rx_freq[1]);
+     if (err != 0) {
+-        DEBUG_MSG("ERROR: Failed to setup sx125x radio for RF chain 0\n");
++        ERROR_PRINTF("Failed to setup sx125x radio for RF chain 0\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -753,7 +779,7 @@ int lgw_start(void) {
+         lgw_reg_w(LGW_CLK32M_EN, 1);
+         i = lbt_setup();
+         if (i != LGW_LBT_SUCCESS) {
+-            DEBUG_MSG("ERROR: lbt_setup() did not return SUCCESS\n");
++            ERROR_PRINTF("lbt_setup() did not return SUCCESS\n");
+             return LGW_HAL_ERROR;
+         }
+ 
+@@ -761,7 +787,7 @@ int lgw_start(void) {
+         lgw_reg_w(LGW_CLK32M_EN, 0);
+         i = lbt_start();
+         if (i != LGW_LBT_SUCCESS) {
+-            DEBUG_MSG("ERROR: lbt_start() did not return SUCCESS\n");
++            ERROR_PRINTF("lbt_start() did not return SUCCESS\n");
+             return LGW_HAL_ERROR;
+         }
+     }
+@@ -794,7 +820,7 @@ int lgw_start(void) {
+             cal_cmd |= 0x00; /* Bit 5: 0: SX1257, 1: SX1255 */
+             break;
+         default:
+-            DEBUG_PRINTF("ERROR: UNEXPECTED VALUE %d FOR RADIO TYPE\n", rf_radio_type[0]);
++            ERROR_PRINTF("UNEXPECTED VALUE %d FOR RADIO TYPE\n", rf_radio_type[0]);
              break;
      }
-
+ 
+@@ -812,7 +838,7 @@ int lgw_start(void) {
+     lgw_reg_r(LGW_DBG_AGC_MCU_RAM_DATA, &read_val);
+     fw_version = (uint8_t)read_val;
+     if (fw_version != FW_VERSION_CAL) {
+-        printf("ERROR: Version of calibration firmware not expected, actual:%d expected:%d\n", fw_version, FW_VERSION_CAL);
++        ERROR_PRINTF("Version of calibration firmware not expected, actual:%d expected:%d\n", fw_version, FW_VERSION_CAL);
+         return -1;
+     }
+ 
+@@ -838,7 +864,7 @@ int lgw_start(void) {
+         bit 6: radio B TX DC Offset correction successful
+     */
+     if ((cal_status & 0x81) != 0x81) {
+-        DEBUG_PRINTF("ERROR: CALIBRATION FAILURE (STATUS = %u)\n", cal_status);
++        ERROR_PRINTF("CALIBRATION FAILURE (STATUS = %u)\n", cal_status);
+         return LGW_HAL_ERROR;
+     } else {
+         DEBUG_PRINTF("Note: calibration finished (status = %u)\n", cal_status);
+@@ -883,7 +909,7 @@ int lgw_start(void) {
+ 
+     /* Sanity check for RX frequency */
+     if (rf_rx_freq[0] == 0) {
+-        DEBUG_MSG("ERROR: wrong configuration, rf_rx_freq[0] is not set\n");
++        ERROR_PRINTF("wrong configuration, rf_rx_freq[0] is not set\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -939,7 +965,7 @@ int lgw_start(void) {
+             case BW_250KHZ: lgw_reg_w(LGW_MBWSSF_MODEM_BW, 1); break;
+             case BW_500KHZ: lgw_reg_w(LGW_MBWSSF_MODEM_BW, 2); break;
+             default:
+-                DEBUG_PRINTF("ERROR: UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", lora_rx_bw);
++                ERROR_PRINTF("UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", lora_rx_bw);
+                 return LGW_HAL_ERROR;
+         }
+         switch(lora_rx_sf) {
+@@ -950,7 +976,7 @@ int lgw_start(void) {
+             case DR_LORA_SF11: lgw_reg_w(LGW_MBWSSF_RATE_SF, 11); break;
+             case DR_LORA_SF12: lgw_reg_w(LGW_MBWSSF_RATE_SF, 12); break;
+             default:
+-                DEBUG_PRINTF("ERROR: UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", lora_rx_sf);
++                ERROR_PRINTF("UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", lora_rx_sf);
+                 return LGW_HAL_ERROR;
+         }
+         lgw_reg_w(LGW_MBWSSF_PPM_OFFSET, lora_rx_ppm_offset); /* default 0 */
+@@ -994,14 +1020,14 @@ int lgw_start(void) {
+     lgw_reg_r(LGW_DBG_AGC_MCU_RAM_DATA, &read_val);
+     fw_version = (uint8_t)read_val;
+     if (fw_version != FW_VERSION_AGC) {
+-        DEBUG_PRINTF("ERROR: Version of AGC firmware not expected, actual:%d expected:%d\n", fw_version, FW_VERSION_AGC);
++        ERROR_PRINTF("Version of AGC firmware not expected, actual:%d expected:%d\n", fw_version, FW_VERSION_AGC);
+         return LGW_HAL_ERROR;
+     }
+     lgw_reg_w(LGW_DBG_ARB_MCU_RAM_ADDR, FW_VERSION_ADDR);
+     lgw_reg_r(LGW_DBG_ARB_MCU_RAM_DATA, &read_val);
+     fw_version = (uint8_t)read_val;
+     if (fw_version != FW_VERSION_ARB) {
+-        DEBUG_PRINTF("ERROR: Version of arbiter firmware not expected, actual:%d expected:%d\n", fw_version, FW_VERSION_ARB);
++        ERROR_PRINTF("Version of arbiter firmware not expected, actual:%d expected:%d\n", fw_version, FW_VERSION_ARB);
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -1010,7 +1036,7 @@ int lgw_start(void) {
+ 
+     lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
+     if (read_val != 0x10) {
+-        DEBUG_PRINTF("ERROR: AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
++        ERROR_PRINTF("AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -1023,7 +1049,7 @@ int lgw_start(void) {
+         wait_ms(1);
+         lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
+         if (read_val != (0x30 + i)) {
+-            DEBUG_PRINTF("ERROR: AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
++            ERROR_PRINTF("AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
+             return LGW_HAL_ERROR;
+         }
+     }
+@@ -1036,7 +1062,7 @@ int lgw_start(void) {
+         wait_ms(1);
+         lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
+         if (read_val != 0x30) {
+-            DEBUG_PRINTF("ERROR: AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
++            ERROR_PRINTF("AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
+             return LGW_HAL_ERROR;
+         }
+     }
+@@ -1048,7 +1074,7 @@ int lgw_start(void) {
+     wait_ms(1);
+     lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
+     if (read_val != 0x33) {
+-        DEBUG_PRINTF("ERROR: AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
++        ERROR_PRINTF("AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -1059,7 +1085,7 @@ int lgw_start(void) {
+     wait_ms(1);
+     lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
+     if (read_val != 0x30) {
+-        DEBUG_PRINTF("ERROR: AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
++        ERROR_PRINTF("AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -1071,7 +1097,7 @@ int lgw_start(void) {
+     DEBUG_MSG("Info: putting back original RADIO_SELECT value\n");
+     lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
+     if (read_val != 0x40) {
+-        DEBUG_PRINTF("ERROR: AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
++        ERROR_PRINTF("AGC FIRMWARE INITIALIZATION FAILURE, STATUS 0x%02X\n", (uint8_t)read_val);
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -1080,7 +1106,7 @@ int lgw_start(void) {
+ 
+     /* */
+     if (lbt_is_enabled() == true) {
+-        printf("INFO: Configuring LBT, this may take few seconds, please wait...\n");
++        INFO_PRINTF("Configuring LBT, this may take few seconds, please wait...\n");
+         wait_ms(8400);
+     }
+ 
+@@ -1114,13 +1140,13 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
+ 
+     /* check if the concentrator is running */
+     if (lgw_is_started == false) {
+-        DEBUG_MSG("ERROR: CONCENTRATOR IS NOT RUNNING, START IT BEFORE RECEIVING\n");
++        ERROR_PRINTF("CONCENTRATOR IS NOT RUNNING, START IT BEFORE RECEIVING\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+     /* check input variables */
+     if ((max_pkt <= 0) || (max_pkt > LGW_PKT_FIFO_SIZE)) {
+-        DEBUG_PRINTF("ERROR: %d = INVALID MAX NUMBER OF PACKETS TO FETCH\n", max_pkt);
++        ERROR_PRINTF("%d = INVALID MAX NUMBER OF PACKETS TO FETCH\n", max_pkt);
+         return LGW_HAL_ERROR;
+     }
+     CHECK_NULL(pkt_data);
+@@ -1247,7 +1273,7 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
+                         bw_pow = 4;
+                         break;
+                     default:
+-                        DEBUG_PRINTF("ERROR: UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", p->bandwidth);
++                        ERROR_PRINTF("UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", p->bandwidth);
+                         delay_x = 0;
+                         bw_pow = 0;
+                 }
+@@ -1304,7 +1330,7 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
+             /* RSSI correction */
+             p->rssi = RSSI_FSK_POLY_0 + RSSI_FSK_POLY_1 * p->rssi + RSSI_FSK_POLY_2 * pow(p->rssi, 2);
+         } else {
+-            DEBUG_MSG("ERROR: UNEXPECTED PACKET ORIGIN\n");
++            ERROR_PRINTF("UNEXPECTED PACKET ORIGIN\n");
+             p->status = STAT_UNDEFINED;
+             p->modulation = MOD_UNDEFINED;
+             p->rssi = -128.0;
+@@ -1347,61 +1373,61 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+ 
+     /* check if the concentrator is running */
+     if (lgw_is_started == false) {
+-        DEBUG_MSG("ERROR: CONCENTRATOR IS NOT RUNNING, START IT BEFORE SENDING\n");
++        ERROR_PRINTF("CONCENTRATOR IS NOT RUNNING, START IT BEFORE SENDING\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+     /* check input range (segfault prevention) */
+     if (pkt_data.rf_chain >= LGW_RF_CHAIN_NB) {
+-        DEBUG_MSG("ERROR: INVALID RF_CHAIN TO SEND PACKETS\n");
++        ERROR_PRINTF("INVALID RF_CHAIN TO SEND PACKETS\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+     /* check input variables */
+     if (rf_tx_enable[pkt_data.rf_chain] == false) {
+-        DEBUG_MSG("ERROR: SELECTED RF_CHAIN IS DISABLED FOR TX ON SELECTED BOARD\n");
++        ERROR_PRINTF("SELECTED RF_CHAIN IS DISABLED FOR TX ON SELECTED BOARD\n");
+         return LGW_HAL_ERROR;
+     }
+     if (rf_enable[pkt_data.rf_chain] == false) {
+-        DEBUG_MSG("ERROR: SELECTED RF_CHAIN IS DISABLED\n");
++        ERROR_PRINTF("SELECTED RF_CHAIN IS DISABLED\n");
+         return LGW_HAL_ERROR;
+     }
+     if (!IS_TX_MODE(pkt_data.tx_mode)) {
+-        DEBUG_MSG("ERROR: TX_MODE NOT SUPPORTED\n");
++        ERROR_PRINTF("TX_MODE NOT SUPPORTED\n");
+         return LGW_HAL_ERROR;
+     }
+     if (pkt_data.modulation == MOD_LORA) {
+         if (!IS_LORA_BW(pkt_data.bandwidth)) {
+-            DEBUG_MSG("ERROR: BANDWIDTH NOT SUPPORTED BY LORA TX\n");
++            ERROR_PRINTF("BANDWIDTH NOT SUPPORTED BY LORA TX\n");
+             return LGW_HAL_ERROR;
+         }
+         if (!IS_LORA_STD_DR(pkt_data.datarate)) {
+-            DEBUG_MSG("ERROR: DATARATE NOT SUPPORTED BY LORA TX\n");
++            ERROR_PRINTF("DATARATE NOT SUPPORTED BY LORA TX\n");
+             return LGW_HAL_ERROR;
+         }
+         if (!IS_LORA_CR(pkt_data.coderate)) {
+-            DEBUG_MSG("ERROR: CODERATE NOT SUPPORTED BY LORA TX\n");
++            ERROR_PRINTF("CODERATE NOT SUPPORTED BY LORA TX\n");
+             return LGW_HAL_ERROR;
+         }
+         if (pkt_data.size > 255) {
+-            DEBUG_MSG("ERROR: PAYLOAD LENGTH TOO BIG FOR LORA TX\n");
++            ERROR_PRINTF("PAYLOAD LENGTH TOO BIG FOR LORA TX\n");
+             return LGW_HAL_ERROR;
+         }
+     } else if (pkt_data.modulation == MOD_FSK) {
+         if((pkt_data.f_dev < 1) || (pkt_data.f_dev > 200)) {
+-            DEBUG_MSG("ERROR: TX FREQUENCY DEVIATION OUT OF ACCEPTABLE RANGE\n");
++            ERROR_PRINTF("TX FREQUENCY DEVIATION OUT OF ACCEPTABLE RANGE\n");
+             return LGW_HAL_ERROR;
+         }
+         if(!IS_FSK_DR(pkt_data.datarate)) {
+-            DEBUG_MSG("ERROR: DATARATE NOT SUPPORTED BY FSK IF CHAIN\n");
++            ERROR_PRINTF("DATARATE NOT SUPPORTED BY FSK IF CHAIN\n");
+             return LGW_HAL_ERROR;
+         }
+         if (pkt_data.size > 255) {
+-            DEBUG_MSG("ERROR: PAYLOAD LENGTH TOO BIG FOR FSK TX\n");
++            ERROR_PRINTF("PAYLOAD LENGTH TOO BIG FOR FSK TX\n");
+             return LGW_HAL_ERROR;
+         }
+     } else {
+-        DEBUG_MSG("ERROR: INVALID TX MODULATION\n");
++        ERROR_PRINTF("INVALID TX MODULATION\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -1448,10 +1474,15 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+             part_frac = ((pkt_data.freq_hz % (SX125x_32MHz_FRAC << 8)) << 8) / SX125x_32MHz_FRAC; /* fractional part, gives middle part and LSB */
+             break;
+         default:
+-            DEBUG_PRINTF("ERROR: UNEXPECTED VALUE %d FOR RADIO TYPE\n", rf_radio_type[0]);
++            ERROR_PRINTF("UNEXPECTED VALUE %d FOR RADIO TYPE\n", rf_radio_type[0]);
+             break;
+     }
+ 
 +    if( lgwx_device_mode ) {
-+	pkt_data.invert_pol = false;
-+	pkt_data.no_crc = false;
++        pkt_data.invert_pol = false;
++        pkt_data.no_crc = false;
 +    }
 +
      buff[0] = 0xFF & part_int; /* Most Significant Byte */
      buff[1] = 0xFF & (part_frac >> 8); /* middle byte */
      buff[2] = 0xFF & part_frac; /* Least Significant Byte */
-@@ -1600,10 +1627,17 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+@@ -1482,14 +1513,14 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+             case DR_LORA_SF10: buff[9] = 10; break;
+             case DR_LORA_SF11: buff[9] = 11; break;
+             case DR_LORA_SF12: buff[9] = 12; break;
+-            default: DEBUG_PRINTF("ERROR: UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", pkt_data.datarate);
++            default: ERROR_PRINTF("UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", pkt_data.datarate);
+         }
+         switch (pkt_data.coderate) {
+             case CR_LORA_4_5: buff[9] |= 1 << 4; break;
+             case CR_LORA_4_6: buff[9] |= 2 << 4; break;
+             case CR_LORA_4_7: buff[9] |= 3 << 4; break;
+             case CR_LORA_4_8: buff[9] |= 4 << 4; break;
+-            default: DEBUG_PRINTF("ERROR: UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", pkt_data.coderate);
++            default: ERROR_PRINTF("UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", pkt_data.coderate);
+         }
+         if (pkt_data.no_crc == false) {
+             buff[9] |= 0x80; /* set 'CRC enable' bit */
+@@ -1505,7 +1536,7 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+             case BW_125KHZ: buff[11] = 0; break;
+             case BW_250KHZ: buff[11] = 1; break;
+             case BW_500KHZ: buff[11] = 2; break;
+-            default: DEBUG_PRINTF("ERROR: UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", pkt_data.bandwidth);
++            default: ERROR_PRINTF("UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", pkt_data.bandwidth);
+         }
+         if (pkt_data.no_header == true) {
+             buff[11] |= 0x04; /* set 'implicit header' bit */
+@@ -1582,7 +1613,7 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+         buff[0] &= 0x7F; /* Always use narrow band for FSK (force MSB to 0) */
+ 
+     } else {
+-        DEBUG_MSG("ERROR: INVALID TX MODULATION..\n");
++        ERROR_PRINTF("INVALID TX MODULATION..\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -1600,10 +1631,17 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
      lgw_reg_wb(LGW_TX_DATA_BUF_DATA, buff, transfer_size);
      DEBUG_ARRAY(i, transfer_size, buff);
-
+ 
 -    x = lbt_is_channel_free(&pkt_data, tx_start_delay, &tx_allowed);
 -    if (x != LGW_LBT_SUCCESS) {
 -        DEBUG_MSG("ERROR: Failed to check channel availability for TX\n");
 -        return LGW_HAL_ERROR;
 +    if( lgwx_lbt_mode == LGWX_LBT_MODE_OFF ) {
-+	tx_allowed = true;
++        tx_allowed = true;
 +    } else {
-+	//XXX:TBD: if( lgwx_lbt_mode == LGWX_LBT_MODE_EU868 ) {
-+	//XXX:TBD:     // change txend time so that lbt_is_channel_free checks if dead gap is within 5ms (PSA rules)
-+	//XXX:TBD: }
-+	x = lbt_is_channel_free(&pkt_data, tx_start_delay, &tx_allowed);
-+	if (x != LGW_LBT_SUCCESS) {
-+	    DEBUG_MSG("ERROR: Failed to check channel availability for TX\n");
-+	    return LGW_HAL_ERROR;
-+	}
++        //XXX:TBD: if( lgwx_lbt_mode == LGWX_LBT_MODE_EU868 ) {
++        //XXX:TBD:     // change txend time so that lbt_is_channel_free checks if dead gap is within 5ms (PSA rules)
++        //XXX:TBD: }
++        x = lbt_is_channel_free(&pkt_data, tx_start_delay, &tx_allowed);
++        if (x != LGW_LBT_SUCCESS) {
++            ERROR_PRINTF("Failed to check channel availability for TX\n");
++            return LGW_HAL_ERROR;
++        }
      }
      if (tx_allowed == true) {
          switch(pkt_data.tx_mode) {
+@@ -1620,11 +1658,11 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+                 break;
+ 
+             default:
+-                DEBUG_PRINTF("ERROR: UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", pkt_data.tx_mode);
++                ERROR_PRINTF("UNEXPECTED VALUE %d IN SWITCH STATEMENT\n", pkt_data.tx_mode);
+                 return LGW_HAL_ERROR;
+         }
+     } else {
+-        DEBUG_MSG("ERROR: Cannot send packet, channel is busy (LBT)\n");
++        ERROR_PRINTF("Cannot send packet, channel is busy (LBT)\n");
+         return LGW_LBT_ISSUE;
+     }
+ 
+@@ -1657,7 +1695,7 @@ int lgw_status(uint8_t select, uint8_t *code) {
+         return LGW_HAL_SUCCESS;
+ 
+     } else {
+-        DEBUG_MSG("ERROR: SELECTION INVALID, NO STATUS TO RETURN\n");
++        ERROR_PRINTF("SELECTION INVALID, NO STATUS TO RETURN\n");
+         return LGW_HAL_ERROR;
+     }
+ 
+@@ -1705,7 +1743,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
+     double Tsym, Tpreamble, Tpayload, Tfsk;
+ 
+     if (packet == NULL) {
+-        DEBUG_MSG("ERROR: Failed to compute time on air, wrong parameter\n");
++        ERROR_PRINTF("Failed to compute time on air, wrong parameter\n");
+         return 0;
+     }
+ 
+@@ -1715,7 +1753,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
+         if (val != -1) {
+             BW = (uint16_t)(val / 1E3);
+         } else {
+-            DEBUG_PRINTF("ERROR: Cannot compute time on air for this packet, unsupported bandwidth (0x%02X)\n", packet->bandwidth);
++            ERROR_PRINTF("Cannot compute time on air for this packet, unsupported bandwidth (0x%02X)\n", packet->bandwidth);
+             return 0;
+         }
+ 
+@@ -1724,7 +1762,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
+         if (val != -1) {
+             SF = (uint8_t)val;
+         } else {
+-            DEBUG_PRINTF("ERROR: Cannot compute time on air for this packet, unsupported datarate (0x%02X)\n", packet->datarate);
++            ERROR_PRINTF("Cannot compute time on air for this packet, unsupported datarate (0x%02X)\n", packet->datarate);
+             return 0;
+         }
+ 
+@@ -1758,7 +1796,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
+         Tpacket = (uint32_t)Tfsk + 1; /* add margin for rounding */
+     } else {
+         Tpacket = 0;
+-        DEBUG_PRINTF("ERROR: Cannot compute time on air for this packet, unsupported modulation (0x%02X)\n", packet->modulation);
++        ERROR_PRINTF("Cannot compute time on air for this packet, unsupported modulation (0x%02X)\n", packet->modulation);
+     }
+ 
+     return Tpacket;
+diff --git a/libloragw/src/loragw_lbt.c b/libloragw/src/loragw_lbt.c
+index 9c43521..515e9ac 100644
+--- a/libloragw/src/loragw_lbt.c
++++ b/libloragw/src/loragw_lbt.c
+@@ -41,6 +41,8 @@ Maintainer: Michael Coracin
+     #define CHECK_NULL(a)               if(a==NULL){return LGW_REG_ERROR;}
+ #endif
+ 
++#include "loragw_stationlog.h"
++
+ #define LBT_TIMESTAMP_MASK  0x007FF000 /* 11-bits timestamp */
+ 
+ /* -------------------------------------------------------------------------- */
+@@ -326,7 +328,7 @@ int lbt_is_channel_free(struct lgw_pkt_tx_s * pkt_data, uint16_t tx_start_delay,
+             delta_time = tx_end_time - lbt_time;
+         } else {
+             /* It means LBT counter has wrapped */
+-            printf("LBT: lbt counter has wrapped\n");
++            DEBUG_PRINTF("LBT: lbt counter has wrapped\n");
+             delta_time = (LBT_TIMESTAMP_MASK - lbt_time) + tx_end_time;
+         }
+ 
+diff --git a/libloragw/src/loragw_radio.c b/libloragw/src/loragw_radio.c
+index b3046a9..a01f65b 100644
+--- a/libloragw/src/loragw_radio.c
++++ b/libloragw/src/loragw_radio.c
+@@ -46,6 +46,8 @@ Maintainer: Michael Coracin
+     #define CHECK_NULL(a)               if(a==NULL){return LGW_REG_ERROR;}
+ #endif
+ 
++#include "loragw_stationlog.h"
++
+ /* -------------------------------------------------------------------------- */
+ /* --- PRIVATE TYPES -------------------------------------------------------- */
+ 
+diff --git a/libloragw/src/loragw_reg.c b/libloragw/src/loragw_reg.c
+index 14e23cd..6d8aab3 100644
+--- a/libloragw/src/loragw_reg.c
++++ b/libloragw/src/loragw_reg.c
+@@ -42,6 +42,8 @@ Maintainer: Sylvain Miermont
+     #define CHECK_NULL(a)               if(a==NULL){return LGW_REG_ERROR;}
+ #endif
+ 
++#include "loragw_stationlog.h"
++
+ /* -------------------------------------------------------------------------- */
+ /* --- PRIVATE CONSTANTS ---------------------------------------------------- */
+ 
 diff --git a/libloragw/src/loragw_spi.native.c b/libloragw/src/loragw_spi.native.c
-index c01ed1c..0e2b64c 100644
+index c01ed1c..7cc7eea 100644
 --- a/libloragw/src/loragw_spi.native.c
 +++ b/libloragw/src/loragw_spi.native.c
-@@ -54,7 +54,7 @@ Maintainer: Sylvain Miermont
+@@ -48,13 +48,15 @@ Maintainer: Sylvain Miermont
+     #define CHECK_NULL(a)                if(a==NULL){return LGW_SPI_ERROR;}
+ #endif
+ 
++#include "loragw_stationlog.h"
++
+ /* -------------------------------------------------------------------------- */
+ /* --- PRIVATE CONSTANTS ---------------------------------------------------- */
+ 
  #define READ_ACCESS     0x00
  #define WRITE_ACCESS    0x80
- #define SPI_SPEED       8000000
+-#define SPI_SPEED       8000000
 -#define SPI_DEV_PATH    "/dev/spidev0.0"
++#define SPI_SPEED       (getenv("LORAGW_SPI_SPEED")==NULL ? 8000000 : atoi(getenv("LORAGW_SPI_SPEED")))
 +#define SPI_DEV_PATH    (getenv("LORAGW_SPI")==NULL ? "/dev/spidev0.0" : getenv("LORAGW_SPI"))
  //#define SPI_DEV_PATH    "/dev/spidev32766.0"
-
+ 
  /* -------------------------------------------------------------------------- */
+@@ -96,6 +98,7 @@ int lgw_spi_open(void **spi_target_ptr) {
+     }
+ 
+     /* setting SPI max clk (in Hz) */
++    INFO_PRINTF("Setting SPI speed to %u\n", SPI_SPEED);
+     i = SPI_SPEED;
+     a = ioctl(dev, SPI_IOC_WR_MAX_SPEED_HZ, &i);
+     b = ioctl(dev, SPI_IOC_RD_MAX_SPEED_HZ, &i);
+@@ -111,7 +114,7 @@ int lgw_spi_open(void **spi_target_ptr) {
+     a = ioctl(dev, SPI_IOC_WR_LSB_FIRST, &i);
+     b = ioctl(dev, SPI_IOC_RD_LSB_FIRST, &i);
+     if ((a < 0) || (b < 0)) {
+-        DEBUG_MSG("ERROR: SPI PORT FAIL TO SET MSB FIRST\n");
++        ERROR_PRINTF("SPI PORT FAIL TO SET MSB FIRST\n");
+         close(dev);
+         free(spi_device);
+         return LGW_SPI_ERROR;
+@@ -122,14 +125,14 @@ int lgw_spi_open(void **spi_target_ptr) {
+     a = ioctl(dev, SPI_IOC_WR_BITS_PER_WORD, &i);
+     b = ioctl(dev, SPI_IOC_RD_BITS_PER_WORD, &i);
+     if ((a < 0) || (b < 0)) {
+-        DEBUG_MSG("ERROR: SPI PORT FAIL TO SET 8 BITS-PER-WORD\n");
++        ERROR_PRINTF("SPI PORT FAIL TO SET 8 BITS-PER-WORD\n");
+         close(dev);
+         return LGW_SPI_ERROR;
+     }
+ 
+     *spi_device = dev;
+     *spi_target_ptr = (void *)spi_device;
+-    DEBUG_MSG("Note: SPI port opened and configured ok\n");
++    INFO_PRINTF("Note: SPI port opened and configured ok\n");
+     return LGW_SPI_SUCCESS;
+ }
+ 
+@@ -150,10 +153,10 @@ int lgw_spi_close(void *spi_target) {
+ 
+     /* determine return code */
+     if (a < 0) {
+-        DEBUG_MSG("ERROR: SPI PORT FAILED TO CLOSE\n");
++        ERROR_PRINTF("SPI PORT FAILED TO CLOSE\n");
+         return LGW_SPI_ERROR;
+     } else {
+-        DEBUG_MSG("Note: SPI port closed\n");
++        INFO_PRINTF("Note: SPI port closed\n");
+         return LGW_SPI_SUCCESS;
+     }
+ }
+@@ -199,7 +202,7 @@ int lgw_spi_w(void *spi_target, uint8_t spi_mux_mode, uint8_t spi_mux_target, ui
+ 
+     /* determine return code */
+     if (a != (int)k.len) {
+-        DEBUG_MSG("ERROR: SPI WRITE FAILURE\n");
++        ERROR_PRINTF("SPI WRITE FAILURE\n");
+         return LGW_SPI_ERROR;
+     } else {
+         DEBUG_MSG("Note: SPI write success\n");
+@@ -249,7 +252,7 @@ int lgw_spi_r(void *spi_target, uint8_t spi_mux_mode, uint8_t spi_mux_target, ui
+ 
+     /* determine return code */
+     if (a != (int)k.len) {
+-        DEBUG_MSG("ERROR: SPI READ FAILURE\n");
++        ERROR_PRINTF("SPI READ FAILURE\n");
+         return LGW_SPI_ERROR;
+     } else {
+         DEBUG_MSG("Note: SPI read success\n");
+@@ -277,7 +280,7 @@ int lgw_spi_wb(void *spi_target, uint8_t spi_mux_mode, uint8_t spi_mux_target, u
+     }
+     CHECK_NULL(data);
+     if (size == 0) {
+-        DEBUG_MSG("ERROR: BURST OF NULL LENGTH\n");
++        ERROR_PRINTF("BURST OF NULL LENGTH\n");
+         return LGW_SPI_ERROR;
+     }
+ 
+@@ -312,7 +315,7 @@ int lgw_spi_wb(void *spi_target, uint8_t spi_mux_mode, uint8_t spi_mux_target, u
+ 
+     /* determine return code */
+     if (byte_transfered != size) {
+-        DEBUG_MSG("ERROR: SPI BURST WRITE FAILURE\n");
++        ERROR_PRINTF("SPI BURST WRITE FAILURE\n");
+         return LGW_SPI_ERROR;
+     } else {
+         DEBUG_MSG("Note: SPI burst write success\n");
+@@ -339,7 +342,7 @@ int lgw_spi_rb(void *spi_target, uint8_t spi_mux_mode, uint8_t spi_mux_target, u
+     }
+     CHECK_NULL(data);
+     if (size == 0) {
+-        DEBUG_MSG("ERROR: BURST OF NULL LENGTH\n");
++        ERROR_PRINTF("ERROR: BURST OF NULL LENGTH\n");
+         return LGW_SPI_ERROR;
+     }
+ 
+@@ -368,16 +371,16 @@ int lgw_spi_rb(void *spi_target, uint8_t spi_mux_mode, uint8_t spi_mux_target, u
+         k[1].rx_buf = (unsigned long)(data + offset);
+         k[1].len = chunk_size;
+         byte_transfered += (ioctl(spi_device, SPI_IOC_MESSAGE(2), &k) - k[0].len );
+-        DEBUG_PRINTF("BURST READ: to trans %d # chunk %d # transferred %d \n", size_to_do, chunk_size, byte_transfered);
++        // DEBUG_PRINTF("BURST READ: to trans %d # chunk %d # transferred %d \n", size_to_do, chunk_size, byte_transfered);
+         size_to_do -= chunk_size;  /* subtract the quantity of data already transferred */
+     }
+ 
+     /* determine return code */
+     if (byte_transfered != size) {
+-        DEBUG_MSG("ERROR: SPI BURST READ FAILURE\n");
++        ERROR_PRINTF("ERROR: SPI BURST READ FAILURE\n");
+         return LGW_SPI_ERROR;
+     } else {
+-        DEBUG_MSG("Note: SPI burst read success\n");
++        // DEBUG_MSG("Note: SPI burst read success\n");
+         return LGW_SPI_SUCCESS;
+     }
+ }

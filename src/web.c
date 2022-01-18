@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -114,7 +114,7 @@ static void web_onev (conn_t* _conn, int ev) {
     
     case HTTPDEV_REQUEST: {
         dbuf_t hdr = httpd_getHdr(hd);
-        
+        LOG(MOD_WEB|XDEBUG, "Client request: content-length=%d\n%.*s", hd->extra.clen, hdr.bufsize, hdr.buf);
         httpd_pstate_t pstate;
         int r = 500;
         // Note: writing to respbuf overwrites hdr!

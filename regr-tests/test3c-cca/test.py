@@ -1,5 +1,5 @@
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -133,8 +133,10 @@ class TestMuxs(tu.Muxs):
         return dnmsg
 
     async def send_classC(self):
+        # Wait a while until station has synced time with SX130x
+        # otherwise class C gets rejected
+        await asyncio.sleep(3.0)
         try:
-            await asyncio.sleep(1.0)
             assert self.seqno & 1 == 0
 
             for f in (FREQ1,FREQ2,FREQ3,FREQ2):

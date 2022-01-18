@@ -1,5 +1,5 @@
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -47,6 +47,7 @@ sim = None
 REGION = os.environ.get('REGION','KR920')
 PPM    = 1000000
 BINTV  = 2
+PPSTHRES = 10  # measure for timing accuracy of test/sim platform
 
 class TestLgwSimServer(su.LgwSimServer):
     fcnt = 0
@@ -79,7 +80,7 @@ class TestLgwSimServer(su.LgwSimServer):
             logger.debug('LGWSIM: ON_GPS %r', pkt)
             d = utc % PPM
             if d >= PPM//2: d -= PPM
-            assert abs(d) < 10
+            assert abs(d) < PPSTHRES, f'Failed abs(d)={abs(d)} < PPSTHRES={PPSTHRES}'
             assert (utc - d) % PPM == 0
             secs = (utc - d) // PPM
             assert self.last_secs==0 or self.last_secs+BINTV == secs
@@ -198,6 +199,8 @@ class TestMuxs(tu.Muxs):
 #XXX:old:            logger.error('send_classC failed: %s', exc, exc_info=True)
 #XXX:old:            await self.testDone(1)
 
+if 'PPSTHRES' in os.environ:
+    PPSTHRES = int(os.environ['PPSTHRES'])
 
 with open("tc.uri","w") as f:
     f.write('ws://localhost:6038')

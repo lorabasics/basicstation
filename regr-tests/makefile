@@ -1,5 +1,5 @@
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -29,8 +29,13 @@ INFOS=$(shell find . -name 'test*.info')
 all:
 	./run-regression-tests --nohw
 
+# teirich: my VM is a bit slow causing some TX to miss the deadline.
+# Cut the tests some slack...
+slow-vm:
+	TX_AIM_GAP='"40ms"' PPSTHRES=300 ./run-regression-tests --nohw
+
 ci:
-	./run-regression-tests --nohw --verbose --travis
+	./run-regression-tests --nohw --verbose --ghactions
 
 # Reset test state
 reset:
@@ -38,10 +43,12 @@ reset:
 
 # Pack all info files together into a single report
 s2core.info: ${INFOS}
+	@echo "::group::Generate coverage report"
 	lcov -t "s2core" $(patsubst %, -a %, ${INFOS}) -o temp1.info
 	genhtml -o s2core-html temp1.info
 #	lcov -r temp.info '*/test.c' '*/log.c' -o temp.2.info
 #	rm temp.info
+	@echo "::endgroup::"
 	lcov -l temp1.info
 # We're not close to 100% currently
 #	lcov -l temp.2.info | grep -P 'Total:.\s+100%\s+\d+.\s+100%\s+'

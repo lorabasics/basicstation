@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -91,13 +91,20 @@ enum { DR_CNT = 16 };
 enum { DR_ILLEGAL = 16 };
 
 typedef struct s2txunit {
-    ustime_t dc_eu863bands[DC_NUM_BANDS];
+    ustime_t dc_eu868bands[DC_NUM_BANDS];
     ustime_t dc_perChnl[MAX_DNCHNLS+1];
     txidx_t  head;
     tmr_t    timer;
 } s2txunit_t;
 
+enum {
+    BCNING_OK     = 0x00,  // beaconing enabled & running
+    BCNING_NOTIME = 0x01,  // missing GPS/PPS time
+    BCNING_NOPOS  = 0x02   // missing GW position
+};
+
 typedef struct s2bcn {
+    u1_t     state;     // track failure states
     u1_t     ctrl;      // 0x0F => DR, 0xF0 = n frequencies
     u1_t     layout[3]; // time_off, infodesc_off, bcn_len
     u4_t     freqs[8];  // 1 or up to 8 frequencies

@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -105,14 +105,15 @@ static void timesyncReport (int force) {
     if( !force && now < lastReport + TIMESYNC_REPORTS )
         return;
     lastReport = now;
-    uL_t pps_ustime = xtime2ustime(&timesyncs[0], ppsSync.pps_xtime);
-    LOG(MOD_SYN|INFO, "Time sync: ustime=0x%lX utc=0x%lX gpsOffset=0x%lX ppsOffset=%ld syncQual=%d\n",
+    uL_t pps_ustime = timesyncs[0].pps_xtime != 0 ? xtime2ustime(&timesyncs[0], timesyncs[0].pps_xtime) : 0;
+    LOG(MOD_SYN|INFO, "Time sync: NOW          ustime=0x%012lX utc=0x%lX gpsOffset=0x%lX ppsOffset=%ld syncQual=%d\n",
         now, rt_ustime2utc(now),  gpsOffset, ppsOffset, syncQual[0]);
-    LOG(MOD_SYN|INFO, "Time sync: MCU/SX130X#0 ustime=0x%lX xtime=0x%lX pps_xtime=0x%lX",
-        timesyncs[0].ustime, timesyncs[0].xtime, timesyncs[0].pps_xtime);
+    LOG(MOD_SYN|INFO, "Time sync: MCU/SX130X#0 ustime=0x%012lX xtime=0x%lX pps_ustime=0x%lX pps_xtime=0x%lX",
+        timesyncs[0].ustime, timesyncs[0].xtime, pps_ustime, timesyncs[0].pps_xtime);
     if( !ppsOffset )
         return;
-    LOG(MOD_SYN|INFO, "Time sync: Last PPS     ustime=0x%lX xtime=0x%lX pps_ustime=0x%lX pps_xtime=0x%lX",
+    pps_ustime = xtime2ustime(&timesyncs[0], ppsSync.pps_xtime);
+    LOG(MOD_SYN|INFO, "Time sync: Last PPS     ustime=0x%012lX xtime=0x%lX pps_ustime=0x%lX pps_xtime=0x%lX",
         ppsSync.ustime, ppsSync.xtime, pps_ustime, ppsSync.pps_xtime);
     if( !gpsOffset )
         return;
@@ -226,7 +227,7 @@ ustime_t ts_updateTimesync (u1_t txunit, int quality, const timesync_t* curr) {
     if( abs(drift_ppm) > stats->drift_thres ) {
         stats->excessive_drift_cnt += 1;
         if( (stats->excessive_drift_cnt % QUICK_RETRIES) == 0 ) {
-            LOG(MOD_SYN|ERROR, "Repeated excessive clock drifts between MCU/SX130X#%d (%d retries): %.1fppm (threshold %.1fppm)",
+            LOG(MOD_SYN|WARNING, "Repeated excessive clock drifts between MCU/SX130X#%d (%d retries): %.1fppm (threshold %.1fppm)",
                 txunit, stats->excessive_drift_cnt, drift_ppm/fPPM_SCALE, stats->drift_thres/fPPM_SCALE);
         }
         if( stats->excessive_drift_cnt >= 2*QUICK_RETRIES )
@@ -244,22 +245,29 @@ ustime_t ts_updateTimesync (u1_t txunit, int quality, const timesync_t* curr) {
         // We are actually tracking PPS - complain if PPS lost
         s4_t no_pps_secs = (curr->xtime - ppsSync.pps_xtime + PPM/2) / PPM;
         if( no_pps_secs > no_pps_thres ) {
-            LOG(MOD_SYN|ERROR, "No PPS pulse for ~%d secs", no_pps_secs);
+            LOG(MOD_SYN|WARNING, "No PPS pulse for ~%d secs", no_pps_secs);
             no_pps_thres = no_pps_thres >= NO_PPS_ALARM_MAX
                 ? no_pps_thres + NO_PPS_ALARM_MAX
                 : (u4_t)(no_pps_thres * NO_PPS_ALARM_RATE);
         }
     }
     // We update ppsSync only if we have two consecutive time syncs with valid PPS timestamps
-    // and if they are apart ~1s - we might be weird values if no PPS pulse occurred during time sync span.
-    if( !last->pps_xtime || !curr->pps_xtime )
+    // and if they are apart ~1s - we might see weird values if no PPS pulse occurred during time sync span.
+    if( !last->pps_xtime || !curr->pps_xtime ) {
         goto done;
-    if( curr->xtime - curr->pps_xtime > PPM+TX_MIN_GAP )
+    }
+    if( curr->xtime - curr->pps_xtime > PPM+TX_MIN_GAP ) {
+        LOG(MOD_SYN|XDEBUG, "PPS: Rejecting PPS (xtime/pps_xtime spread): curr->xtime=0x%lX   curr->pps_xtime=0x%lX   diff=%lu (>%u)",
+            curr->xtime, curr->pps_xtime, curr->xtime - curr->pps_xtime, PPM+TX_MIN_GAP);
         goto done;  // no PPS since last time sync
+    }
     sL_t err = (curr->pps_xtime - last->pps_xtime) % PPM;
     if( err < 0 ) err += PPM;
-    if( err > MAX_PPS_ERROR && err < PPM-MAX_PPS_ERROR )
+    if( err > MAX_PPS_ERROR && err < PPM-MAX_PPS_ERROR ) {
+        LOG(MOD_SYN|XDEBUG, "PPS: Rejecting PPS (consecutive pps_xtime error): curr->pps_xtime=0x%lX   last->pps_xtime=0x%lX   diff=%lu",
+            curr->pps_xtime, last->pps_xtime, curr->pps_xtime - last->pps_xtime);
         goto done;  // out of scope - probably no value latched
+    }
     if( !ppsSync.pps_xtime )
         LOG(MOD_SYN|INFO, "First PPS pulse acquired");
 
@@ -282,12 +290,13 @@ ustime_t ts_updateTimesync (u1_t txunit, int quality, const timesync_t* curr) {
         LOG(MOD_SYN|INFO, "Obtained initial PPS offset (%ld) - starting timesync with LNS", ppsOffset);
     }
     else if( abs(ppsOffset-off) > (stats->drift_thres * TIMESYNC_RADIO_INTV)/PPM  ) {
-        LOG(MOD_SYN|INFO, "Changed PPS offset: %ld => %ld (delta: %ld)", ppsOffset, off, off-ppsOffset);
+        LOG(MOD_SYN|XDEBUG, "Changed PPS offset: %ld => %ld (delta: %ld)", ppsOffset, off, off-ppsOffset);
         // Adjust ppsOffset to accout for MCU/PPS drift
         ppsOffset = off;
     }
-    // Correct the fractional second of the UTC reference by ppsOffset (expects s-precision UTC time reference)
-    rt_utcOffset = rt_utcOffset - rt_utcOffset%PPM + (PPM-ppsOffset);
+    // Correct the fractional second of the UTC reference so it lines up with PPS
+    ustime_t pps_utctime_us = rt_ustime2utc(pps_ustime) % PPM;
+    rt_utcOffset += pps_utctime_us < PPM/2 ? -pps_utctime_us : PPM-pps_utctime_us;
     // Shift timesync into the middle of two PPS pulses
     // Avoid turning off PPS latching during SX130X sync procedure near the PPS.
     // We might miss a PPS pulse and a scheduled frame might not be sent.

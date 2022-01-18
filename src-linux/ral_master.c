@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -463,6 +463,7 @@ int ral_tx (txjob_t* txjob, s2ctx_t* s2ctx, int nocca) {
     req.xtime = txjob->xtime;
     req.freq = txjob->freq;
     req.txpow = txjob->txpow;
+    req.addcrc = txjob->addcrc;
     req.txlen = txjob->len;
     memcpy(req.txdata, &s2ctx->txq.txdata[txjob->off], txjob->len);
     if( !write_slave_pipe(slave, &req, sizeof(req)) )
@@ -644,6 +645,7 @@ void ral_stop () {
     struct ral_timesync_req req = { .cmd = RAL_CMD_STOP, .rctx = 0 };
     for( int slaveIdx=0; slaveIdx < n_slaves; slaveIdx++ ) {
         slave_t* slave = &slaves[slaveIdx];
+        rt_clrTimer(&slave->tsync);
         write_slave_pipe(slave, &req, sizeof(req));
     }
 }

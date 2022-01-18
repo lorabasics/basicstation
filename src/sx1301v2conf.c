@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -243,7 +243,7 @@ static void parse_SX1301_conf (ujdec_t* D, sx1301ar_chip_cfg_t* chipconf, sx1301
 
 
 static void setDevice (struct board_conf* boardconf, str_t device) {
-    str_t dev = sys_radioDevice(device);
+    str_t dev = sys_radioDevice(device, NULL);
     int sz = sizeof(boardconf->device);
     int n = snprintf(boardconf->device, sz, "%s", dev);
     if( n > sz-1 )
@@ -393,7 +393,7 @@ static int setup_LBT (struct sx1301v2conf* sx1301v2conf, u4_t cca_region) {
     u2_t scantime_us = 0;
     s1_t rssi_target = 0;
 
-    if( cca_region == J_AS923JP ) {
+    if( cca_region == J_AS923_1 ) {
         scantime_us = 5000;
         rssi_target = -80;
     }
@@ -660,23 +660,26 @@ static void dump_boardConf (int bid, sx1301ar_board_cfg_t* c) {
             );
         }
     }
+    log_flushIO();
 }
 
 static void dump_chipConf (int chipid, sx1301ar_chip_cfg_t* c) {
     if( !c->enable ) {
         LOG(MOD_RAL|VERBOSE, "SX1301#%d : disabled", chipid);
-        return;
+    } else {
+        LOG(MOD_RAL|VERBOSE,
+            "SX1301#%d : %^8F rf_chain=%d",
+            chipid,
+            c->freq_hz,
+            c->rf_chain);
     }
-    LOG(MOD_RAL|VERBOSE,
-        "SX1301#%d : %^8F rf_chain=%d",
-        chipid,
-        c->freq_hz,
-        c->rf_chain);
+    log_flushIO();
 }
 
 static void dump_chanConf (int chipid, int chanid, sx1301ar_chan_cfg_t* c) {
     if( ! c->enable ) {
         LOG(MOD_RAL|VERBOSE, "  ch %d,%d : disabled", chipid, chanid);
+        log_flushIO();
         return;
     }
     if( chanid == SX1301AR_CHIP_FSK_IDX ) {
@@ -686,6 +689,7 @@ static void dump_chanConf (int chipid, int chanid, sx1301ar_chan_cfg_t* c) {
             chanid,
             c->freq_hz,
             c->modrate);
+        log_flushIO();
         return;
     }
     LOG(MOD_RAL|VERBOSE,
@@ -696,6 +700,7 @@ static void dump_chanConf (int chipid, int chanid, sx1301ar_chan_cfg_t* c) {
         sx1301ar_bw_enum2nb(c->bandwidth),
         sx1301ar_sf_min_enum2nb(c->modrate),
         sx1301ar_sf_max_enum2nb(c->modrate));
+    log_flushIO();
 }
 
 

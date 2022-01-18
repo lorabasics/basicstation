@@ -1,5 +1,5 @@
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -39,8 +39,8 @@ all: $(if ${HFILES},${ARTEFACTS},${PLT})
 ${MBEDINC}:
 	@mkdir -p $@
 
-${PLT}/library/%.a: ${PLT}
-	${MAKE} -C $< lib CC="${CC}" AR="${AR}" LD="${LD}"
+${PLT}/library/%.a: ${PLT}/Makefile
+	${MAKE} -C ${PLT} lib CC="${CC}" AR="${AR}" LD="${LD}" CFLAGS="-Wall -std=gnu11"
 
 ${TD}/${BD}/lib/%.a: ${PLT}/library/%.a
 	@mkdir -p ${@D}

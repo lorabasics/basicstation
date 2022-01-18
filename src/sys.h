@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -31,6 +31,7 @@
 
 #include "rt.h"
 
+enum { COMTYPE_SPI=0, COMTYPE_USB };
 enum { PPS_GPS=0, PPS_FUZZY, PPS_TESTPIN };
 extern u1_t   sys_modePPS; // special PPS mode?
 extern u1_t   sys_deviceMode; // special mode used for GW regr testing
@@ -89,7 +90,7 @@ u4_t  sys_crcCred (int cred_cat, int cred_set);
 
 void   sys_runUpdate ();
 void   sys_abortUpdate ();
-str_t  sys_radioDevice (str_t device);
+str_t  sys_radioDevice (str_t device, u1_t* comtype);
 int    sys_runRadioInit (str_t device);
 int    sys_execCommand (ustime_t max_wait, str_t* argv);
 

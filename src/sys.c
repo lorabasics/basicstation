@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -50,8 +50,6 @@ str_t  webDir;
 uL_t   protoEUI     = 0;
 uL_t   prefixEUI    = 1;           // 1 -> *:ffe:* MAC => EUI scheme
 s1_t   sys_slaveIdx = -1;
-
-#define sync()
 
 // Standard config files:
 //   {tc,cups}{,-bootstrap,-bak}.{uri,key,crt,trust}
@@ -320,7 +318,7 @@ static int updateConfigFiles (int cat, int rollFwd) {
         LOG(MOD_SYS|CRITICAL, "Failed to create '%s': %s", taf_upd);
         return 0;
     }
-    sync();
+    fs_sync();
     for( int ext=0; ext < nFN_EXT; ext++ ) {
         str_t fn_temp = configFilename(cat, FN_TEMP, ext);
         str_t fn_reg  = configFilename(cat, FN_REG,  ext);
@@ -329,7 +327,7 @@ static int updateConfigFiles (int cat, int rollFwd) {
                 rt_fatal("Failed to rename '%s' -> '%s': %s", fn_temp, fn_reg, strerror(errno));
         }
     }
-    sync();
+    fs_sync();
     fs_unlink(taf_upd);
     return 1;
 }
@@ -346,7 +344,7 @@ static int backupConfigFiles (int cat, int rollFwd) {
         LOG(MOD_SYS|CRITICAL, "Failed to create '%s': %s", taf_cpy);
         return 0;
     }
-    sync();
+    fs_sync();
     str_t unlink_fn = transactionFilename(cat, FN_DON);
     if( fs_unlink(unlink_fn) == -1 && errno != ENOENT ) {
       unlink_fail:
@@ -375,9 +373,9 @@ static int backupConfigFiles (int cat, int rollFwd) {
         LOG(MOD_SYS|CRITICAL, "Failed to write '%s': %s", taf_don, strerror(errno));
         return 0;  // just walk away and keep taf file - copying will be continued with next station restart
     }
-    sync();
+    fs_sync();
     fs_unlink(taf_cpy);
-    sync();
+    fs_sync();
     bakDone[cat] = 1;
     return 1;
 }
@@ -490,7 +488,7 @@ void sys_resetConfigUpdate () {
             if( fn ) fs_unlink(fn);
         }
     }
-    sync();
+    fs_sync();
 }
 
 void sys_commitConfigUpdate () {
@@ -577,13 +575,13 @@ void sys_credComplete (int cred_cat, int len) {
     data[SYS_CRED_MYKEY]  = pendData+ko; datalen[SYS_CRED_MYKEY]  = kl;
 
     u1_t * p = (u1_t*)pendData;
-    LOG(INFO, "credComplete - trust_off=%4u, trust_len=%4u               %02x %02x %02x %02x  %02x %02x %02x %02x",
+    LOG(MOD_SYS|INFO, " credComplete - trust_off=%4u, trust_len=%4u               %02x %02x %02x %02x  %02x %02x %02x %02x",
         to, tl,                                     p[to+0], p[to+1], p[to+2], p[to+3],p[to+4], p[to+5], p[to+6], p[to+7]
     );
-    LOG(INFO, "credComplete - cert_off =%4u, cert_len =%4u  %02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x",
+    LOG(MOD_SYS|INFO, " credComplete - cert_off =%4u, cert_len =%4u  %02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x",
         co, cl, p[co-4], p[co-3], p[co-2], p[co-1], p[co+0], p[co+1], p[co+2], p[co+3], p[co+4], p[co+5], p[co+6], p[co+7]
     );
-    LOG(INFO, "credComplete - key_off  =%4u, key_len  =%4u  %02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x",
+    LOG(MOD_SYS|INFO, " credComplete - key_off  =%4u, key_len  =%4u  %02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x",
         ko, kl, p[ko-4], p[ko-3], p[ko-2], p[ko-1], p[ko+0], p[ko+1], p[ko+2], p[ko+3], p[ko+4], p[ko+5], p[ko+6], p[ko+7]
     );
     if( datalen[SYS_CRED_TRUST] + datalen[SYS_CRED_MYCERT] + datalen[SYS_CRED_MYKEY] > len ) {
@@ -651,4 +649,3 @@ void sys_keepAlive (int fd) {
  err:
     LOG(MOD_AIO|ERROR, "Failed to set %s=%d: %s", tag, v, strerror(errno));
 }
-

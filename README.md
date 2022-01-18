@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.com/lorabasics/basicstation.svg?branch=master)](https://travis-ci.com/lorabasics/basicstation)
+[![regr-tests](https://github.com/lorabasics/basicstation/actions/workflows/regr-tests.yml/badge.svg?branch=master)](https://github.com/lorabasics/basicstation/actions/workflows/regr-tests.yml?query=branch%3Amaster)
 
 # LoRa Basics™ Station
 
@@ -40,7 +40,7 @@ Building the Station binary from source, requires
 
 ## First Steps
 
-The following is a three-step quick start guide on how to build and run Station. It uses a Raspberry Pi as host platform and assumes a Concentrator Reference Design 1.5 compatible radio board connected via SPI. In this example the build process is done on the target platform itself (the make environment also supports cross compilation in which case the toolchain is expected in `~/toolchain-$platform` - see [setup.gmk](setup.gmk)).
+The following is a three-step quick start guide on how to build and run Station. It uses a Raspberry Pi as host platform and assumes a Concentrator Reference Design 1.5 compatible radio board connected via SPI, and assumes that SPI port is enabled using the [raspi-config](https://www.raspberrypi.org/documentation/configuration/raspi-config.md) tool. In this example the build process is done on the target platform itself (the make environment also supports cross compilation in which case the toolchain is expected in `~/toolchain-$platform` - see [setup.gmk](setup.gmk)).
 
 #### Step 1: Cloning the Station Repository
 
@@ -86,6 +86,8 @@ cd examples/corecell
 ```
 
 This example configuration for Corecell connects to [The Things Network](https://www.thethingsnetwork.org/) public LNS. The example [station.conf](station.conf) file holds the required radio configurations and station fetches the channel plan from the configured LNS url ([tc.uri](tc.uri)).
+
+Note: SPI port requires to be activated on Raspberry Pi thanks to [raspi-config](https://www.raspberrypi.org/documentation/configuration/raspi-config.md) tool.
 
 #### PicoCell Gateway (Linux OS as HOST + [SX1308 USB Reference design](https://www.semtech.com/products/wireless-rf/lora-gateways/sx1308p868gw))
 

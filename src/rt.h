@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -67,8 +67,14 @@ struct datetime {
 #define USTIME_MAX ((ustime_t)0x7FFFffffFFFFffff)
 
 
+#if defined(CFG_dbuf_small) // Max dbuf size 64 KB
 typedef u2_t doff_t;
 enum { MAX_DOFF = 0xFFFF };
+#else                       // Max dbuf size 4 GB
+typedef u4_t doff_t;
+enum { MAX_DOFF = 0xFFFFFFFF };
+#endif
+
 typedef struct dbuf {
     char*  buf;
     doff_t bufsize;
@@ -111,7 +117,7 @@ void   dbuf_free (dbuf_t* b);
 enum { XDEBUG=0, DEBUG, VERBOSE, INFO, NOTICE, WARNING, ERROR, CRITICAL };  // must be 8!
 enum { MOD_ANY= 0*8, MOD_RAL= 1*8, MOD_S2E= 2*8, MOD_WSS= 3*8,
        MOD_JSN= 4*8, MOD_AIO= 5*8, MOD_CUP= 6*8, MOD_SYS= 7*8,
-       MOD_TCE= 8*8, MOD_TST= 9*8, MOD_SIO=10*8, MOD_SYN=11*8,
+       MOD_TCE= 8*8, MOD_HAL= 9*8, MOD_SIO=10*8, MOD_SYN=11*8,
        MOD_GPS=12*8, MOD_SIM=13*8, MOD_WEB=14*8, MOD_ALL=0xF8 };
 
 void  log_setSlaveIdx (s1_t idx);

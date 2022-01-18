@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -387,6 +387,7 @@ int lgw_rxrf_setconf (uint8_t rf_chain, struct lgw_conf_rxrf_s conf) {
     return LGW_HAL_SUCCESS;
 }
 
+const uint8_t ifmod_config[LGW_IF_CHAIN_NB] = LGW_IFMODEM_CONFIG;
 
 #define LGW_RF_RX_BANDWIDTH_125KHZ  925000      /* for 125KHz channels */
 #define LGW_RF_RX_BANDWIDTH_250KHZ  1000000     /* for 250KHz channels */

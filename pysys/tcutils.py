@@ -1,5 +1,5 @@
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -48,7 +48,7 @@ logger = logging.getLogger('_tcutils')
 base_regions = {
     "EU863" : {
         'msgtype': 'router_config',
-        'region': 'EU863',
+        'region': 'EU868',
         'DRs': [(12, 125, 0),
             (11, 125, 0),
             (10, 125, 0),
@@ -71,7 +71,7 @@ base_regions = {
     },
     "US902": {
         'msgtype': 'router_config',
-        'region': 'US902',
+        'region': 'US915',
         'DRs': [(10, 125, 0),
             (9, 125, 0),
             (8, 125, 0),
@@ -111,7 +111,7 @@ router_config_EU863_6ch = {
     'config': {},
     'hwspec': 'sx1301/1',
     'sx1301_conf': [{'chan_FSK': {'enable': False},
-                     'chan_Lora_std': {'enable': False},
+                     'chan_Lora_std':  {'enable': False},
                      'chan_multiSF_0': {'enable': True, 'if': -375000, 'radio': 0},
                      'chan_multiSF_1': {'enable': True, 'if': -175000, 'radio': 0},
                      'chan_multiSF_2': {'enable': True, 'if': 25000, 'radio': 0},
@@ -231,7 +231,7 @@ class Infos(ServerABC):
         try:
             while True:
                 msg = json.loads(await ws.recv())
-                logger.debug('> INFOS: %r' % msg);
+                logger.debug('> INFOS: %r' % msg)
                 r = msg['router']
                 resp = {
                     'router': r,
@@ -240,14 +240,14 @@ class Infos(ServerABC):
                 }
                 resp = self.router_info_response(resp)
                 await ws.send(json.dumps(resp))
-                logger.debug('< INFOS: %r' % resp);
+                logger.debug('< INFOS: %r' % resp)
         except websockets.exceptions.ConnectionClosed as exc:
             if exc.code != 1000:
                 logger.error('x INFOS close: code=%d reason=%r', exc.code, exc.reason)
         except Exception as exc:
             logger.error('x INFOS exception: %s', exc, exc_info=True)
             try:
-                ws.close()
+                await ws.close()
             except: pass
 
 
@@ -370,6 +370,13 @@ class Cups(ServerABC):
         with open(fn,'rb') as f:
             return self.normalizePEM(f.read(), fmt)[0]
 
+    def rdToken(self, fn):
+        if not os.path.exists(fn):
+            return b'\x00'*4
+        with open(fn,'rb') as f:
+            token = f.read().decode('ascii')
+            return token.strip().encode('ascii') + b'\r\n'
+
     def normalizeId (self, id:Any) -> str:
         # For tests use a shorter representation
         # For production use str(Id6(id))
@@ -381,9 +388,15 @@ class Cups(ServerABC):
                 self.rdPEM('%s/cups-router-%s.key' % (cupsid,routerid), fmt))
 
     def readTcCred(self, routerid, fmt="PEM"):
-        return (self.rdPEM('%s/tc.ca' % self.tcdir, fmt) +
-                self.rdPEM('%s/tc-router-%s.crt' % (self.tcdir,routerid), fmt) +
-                self.rdPEM('%s/tc-router-%s.key' % (self.tcdir,routerid), fmt))
+        tcTrust = self.rdPEM('%s/tc-router-%s.trust' % (self.tcdir,routerid), fmt)
+        if tcTrust == b'\x00\x00\x00\x00':
+            tcTrust = self.rdPEM('%s/tc.ca' % self.tcdir, fmt)
+        tcCert = self.rdPEM('%s/tc-router-%s.crt' % (self.tcdir,routerid), fmt)
+        if tcCert == b'\x00\x00\x00\x00':
+            tcKey = self.rdToken('%s/tc-router-%s.key' % (self.tcdir,routerid))
+        else:
+            tcKey = self.rdPEM('%s/tc-router-%s.key' % (self.tcdir,routerid), fmt)
+        return tcTrust + tcCert + tcKey
 
     def readRouterConfig(self, id:str) -> Dict[str,Any]:
         with open('%s/cups-router-%s.cfg' % (self.homedir, id) ) as f:
@@ -462,7 +475,7 @@ class Cups(ServerABC):
 
     async def handle_update_info(self, request) -> web.Response:
         req = await request.json()
-        logger.debug('> CUPS Request: %r' % req);
+        logger.debug('> CUPS Request: %r' % req)
 
         routerid  = self.normalizeId(req['router'])
         cfg = self.readRouterConfig(routerid)
@@ -503,3 +516,4 @@ class Cups(ServerABC):
 
         body = self.on_response(r_cupsUri, r_tcUri, r_cupsCred, r_tcCred, r_sig, r_fwbin)
         return web.Response(body=body)
+

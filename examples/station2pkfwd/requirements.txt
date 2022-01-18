@@ -1,2 +1,2 @@
-websockets==6.0
-PyYAML==5.1
+websockets==10.1
+PyYAML==6.0

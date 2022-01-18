@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -245,6 +245,7 @@ static void cups_update_info (conn_t* _conn, int ev) {
         uj_encClose(&b, ']');
         uj_encClose(&b, '}');
         http_setContentLength(b.buf, b.pos-bodybeg);
+        LOG(MOD_CUP|DEBUG, "CUPS Request: %.*s", b.pos-bodybeg, b.buf+bodybeg);
         http_request(&cups->hc, &b);
         return;
     }
@@ -258,7 +259,7 @@ static void cups_update_info (conn_t* _conn, int ev) {
             int status = http_getStatus(&cups->hc);
             if( status != 200 ) {
                 dbuf_t msg = http_statusText(&hdr);
-                LOG(VERBOSE, "Failed to retrieve TCURI from CUPS: (%d) %.*s", status, msg.bufsize, msg.buf);
+                LOG(MOD_CUP|VERBOSE, "Failed to retrieve TCURI from CUPS: (%d) %.*s", status, msg.bufsize, msg.buf);
                 cups->cstate = CUPS_ERR_REJECTED;
                 http_close(&cups->hc);
                 return;
@@ -270,14 +271,16 @@ static void cups_update_info (conn_t* _conn, int ev) {
             u1_t cupsuri_len = body.buf[0];
             u1_t tcuri_len = body.buf[1+cupsuri_len];
             body.pos = 2+cupsuri_len+tcuri_len;  // after both URI segments
-            if( body.bufsize < 2 || 1+body.pos > body.bufsize )  // need one more byte for \0
+            if( body.bufsize < 2 || 1+body.pos > body.bufsize ) { // need one more byte for \0
+                LOG(MOD_CUP|ERROR, "Malformed CUPS response: URI segments lengths (%u) exceed available data (%u)", body.pos, body.bufsize);
                 goto proto_err;
+            }
             sys_resetConfigUpdate();
             if( cupsuri_len ) {
                 str_t uri = (str_t)body.buf+1;
                 body.buf[1+cupsuri_len] = 0;
                 sys_saveUri(SYS_CRED_CUPS, uri);
-                LOG(MOD_CUP|INFO, "CUPS URI updated: %s", uri);
+                LOG(MOD_CUP|INFO, "[Segment] CUPS URI: %s", uri);
                 cups->uflags |= UPDATE_FLAG(CUPS_URI);
             }
             if( tcuri_len ) {
@@ -285,7 +288,7 @@ static void cups_update_info (conn_t* _conn, int ev) {
                 char save = uri[tcuri_len];
                 uri[tcuri_len] = 0;
                 sys_saveUri(SYS_CRED_TC, uri);
-                LOG(MOD_CUP|INFO, "TC URI updated: %s", uri);
+                LOG(MOD_CUP|INFO, "[Segment] TC URI: %s", uri);
                 uri[tcuri_len] = save;
                 cups->uflags |= UPDATE_FLAG(TC_URI);
             }
@@ -333,14 +336,14 @@ static void cups_update_info (conn_t* _conn, int ev) {
                 if( cstate == CUPS_FEED_CUPS_CRED ) {
                     sys_credStart(SYS_CRED_CUPS, segm_len);
                     cups->uflags |= UPDATE_FLAG(CUPS_CRED);
-                    LOG(MOD_CUP|INFO, "CUPS Credentials segment (%d bytes)", segm_len);
+                    LOG(MOD_CUP|INFO, "[Segment] CUPS Credentials (%d bytes)", segm_len);
                 }
                 else if( cstate == CUPS_FEED_TC_CRED ) {
                     sys_credStart(SYS_CRED_TC, segm_len);
                     cups->uflags |= UPDATE_FLAG(TC_CRED);
-                    LOG(MOD_CUP|INFO, "TC Credentials segment (%d bytes)", segm_len);
+                    LOG(MOD_CUP|INFO, "[Segment] TC Credentials (%d bytes)", segm_len);
                 } else if( cstate == CUPS_FEED_SIGNATURE ) {
-                    LOG(MOD_CUP|INFO, "Signature segment (%d bytes)", segm_len);
+                    LOG(MOD_CUP|INFO, "[Segment] FW Signature (%d bytes)", segm_len);
                     rt_free(cups->sig);
                     if( segm_len < 8 || segm_len > sizeof(cups->sig->signature) + SIGCRC_LEN ) {
                         LOG(MOD_CUP|ERROR, "Illegal signature segment length (must be 8-%d bytes): %d", sizeof(cups->sig->signature) + SIGCRC_LEN, segm_len);
@@ -351,7 +354,7 @@ static void cups_update_info (conn_t* _conn, int ev) {
                     assert(cstate == CUPS_FEED_UPDATE);
                     sys_commitConfigUpdate(); 
                     sys_updateStart(segm_len);
-                    LOG(MOD_CUP|INFO, "Update segment (%d bytes)", segm_len);
+                    LOG(MOD_CUP|INFO, "[Segment] FW Update (%d bytes)", segm_len);
                 }
             }
         }
@@ -360,11 +363,11 @@ static void cups_update_info (conn_t* _conn, int ev) {
             // Segment finished
             if( cstate == CUPS_FEED_CUPS_CRED ) {
                 sys_credComplete(SYS_CRED_CUPS, cups->segm_len);
-                LOG(MOD_CUP|INFO, "CUPS credentials updated (%d bytes)", cups->segm_len);
+                LOG(MOD_CUP|INFO, "[Segment] CUPS Credentials update completed (%d bytes)", cups->segm_len);
             }
             else if( cstate == CUPS_FEED_TC_CRED ) {
                 sys_credComplete(SYS_CRED_TC, cups->segm_len);
-                LOG(MOD_CUP|INFO, "TC credentials updated (%d bytes)", cups->segm_len);
+                LOG(MOD_CUP|INFO, "[Segment] TC Credentials update completed (%d bytes)", cups->segm_len);
             } else if( cstate == CUPS_FEED_SIGNATURE ) {
                 cups->uflags |= UPDATE_FLAG(SIGNATURE);
                 cups->sig->len = cups->segm_len - SIGCRC_LEN;
@@ -374,9 +377,9 @@ static void cups_update_info (conn_t* _conn, int ev) {
             else { // cstate == CUPS_FEED_UPDATE
                 if( sys_updateCommit(cups->segm_len) ) {
                     cups->uflags |= UPDATE_FLAG(UPDATE);
-                    LOG(MOD_CUP|INFO, "Update received (%d bytes)", cups->segm_len);
+                    LOG(MOD_CUP|INFO, "[Segment] Update committed (%d bytes)", cups->segm_len);
                 } else {
-                    LOG(MOD_CUP|ERROR, "Update received (%d bytes) but failed to write (ignored)", cups->segm_len);
+                    LOG(MOD_CUP|ERROR, "[Segment] Update received (%d bytes) but failed to write (ignored)", cups->segm_len);
                 }
             }
             goto next_cstate;
@@ -463,6 +466,7 @@ void cups_start (cups_t* cups) {
     }
     LOG(MOD_CUP|INFO, "Connecting to CUPS%s ... %s (try #%d)",
         sys_credset2str(cups_credset), cupsuri, cups_failCnt+1);
+    log_flushIO();
     // Use HTTP buffer as temp place for host/port strings
     // Gets destroyed when reading response.
     char* hostname = (char*)cups->hc.c.rbuf;

@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -41,6 +41,9 @@
 #include "sx130xconf.h"
 #include "lgw/loragw_hal.h"
 
+#if !defined(LGW_PKT_FIFO_SIZE)
+#define LGW_PKT_FIFO_SIZE 16
+#endif
 
 static u1_t   pps_en;
 static sL_t   last_xtime;
@@ -72,6 +75,27 @@ static void pipe_write_data (void* data, int len) {
     }
 }
 
+static void log_rawpkt(u1_t level, str_t msg, struct lgw_pkt_rx_s * pkt_rx) {
+    LOG(MOD_RAL|level, "%s[CRC %s] %^.3F %.2f/%.1f %R (mod=%d/dr=%d/bw=%d) xtick=%08x (%u) %d bytes: %64H",
+        msg,
+        pkt_rx->status == STAT_CRC_OK ? "OK"  : "FAIL",
+        pkt_rx->freq_hz,
+        pkt_rx->snr,
+#if defined(CFG_sx1302)
+        pkt_rx->rssis,
+#else
+        pkt_rx->rssi,
+#endif
+        ral_lgw2rps(pkt_rx),
+        pkt_rx->modulation,
+        pkt_rx->datarate,
+        pkt_rx->bandwidth,
+        pkt_rx->count_us,
+        pkt_rx->count_us,
+        pkt_rx->size,
+        pkt_rx->size, pkt_rx->payload
+    );
+}
 
 static void rx_polling (tmr_t* tmr) {
     int n;
@@ -83,14 +107,15 @@ static void rx_polling (tmr_t* tmr) {
         for( int i=0; i<n; i++ ) {
             struct lgw_pkt_rx_s* p = &pkt_rx[i];
             if( p->status != STAT_CRC_OK ) {
-                LOG(MOD_RAL|DEBUG, "Dropped frame with %s CRC (0x%X)",
-                    p->status == STAT_CRC_BAD ? "bad" : p->status == STAT_NO_CRC ? "no" : "undefined", p->status);
+                if( log_shallLog(MOD_RAL|DEBUG) ) {
+                    log_rawpkt(DEBUG, "", p);
+                }
                 continue; // silently ignore bad CRC
             }
             if( p->size > MAX_RXFRAME_LEN ) {
                 // This should not happen since caller provides
                 // space for max frame length - 255 bytes
-                LOG(MOD_RAL|ERROR, "Frame size (%d) exceeds offered buffer (%d)", p->size, MAX_RXFRAME_LEN);
+                log_rawpkt(ERROR, "Dropped RX frame - frame size too large: ", p);
                 continue;
             }
             struct ral_rx_resp resp;
@@ -100,10 +125,19 @@ static void rx_polling (tmr_t* tmr) {
             resp.xtime  = ts_xticks2xtime(p->count_us, last_xtime);
             resp.rps    = ral_lgw2rps(p);
             resp.freq   = p->freq_hz;
-            resp.rssi   = (u1_t)(p->rssi * -1);
-            resp.snr    = (s1_t)(p->snr  *  8);
+#if defined(CFG_sx1302)
+            resp.rssi  = (u1_t)-p->rssis;
+#else
+            resp.rssi  = (u1_t)-p->rssi;
+#endif
+            resp.snr    = (s1_t)(p->snr  *  4);
             resp.rxlen  = p->size;
             memcpy(resp.rxdata, p->payload, p->size);
+
+            if( log_shallLog(MOD_RAL|XDEBUG) ) {
+                log_rawpkt(XDEBUG, "", p);
+            }
+
             pipe_write_data(&resp, sizeof(resp));
         }
     }
@@ -143,7 +177,11 @@ static void pipe_read (aio_t* aio) {
                 off += sizeof(struct ral_txstatus_req);
                 struct ral_response* resp = (struct ral_response*)req;
                 u1_t ret=TXSTATUS_IDLE, status;
+#if defined(CFG_sx1302)
+                int err = lgw_status(0, TX_STATUS, &status);  
+#else
                 int err = lgw_status(TX_STATUS, &status);
+#endif
                 /**/ if (err != LGW_HAL_SUCCESS)  { LOG(MOD_RAL|ERROR, "lgw_status failed"); }
                 else if( status == TX_SCHEDULED ) { ret = TXSTATUS_SCHEDULED; }
                 else if( status == TX_EMITTING  ) { ret = TXSTATUS_EMITTING; }
@@ -153,7 +191,11 @@ static void pipe_read (aio_t* aio) {
             }
             else if( n >= off + sizeof(struct ral_txabort_req) && req->cmd == RAL_CMD_TXABORT) {
                 off += sizeof(struct ral_txabort_req);
+#if defined(CFG_sx1302)
+                lgw_abort_tx(0); 
+#else
                 lgw_abort_tx();
+#endif
                 continue;
             }
             else if( n >= off + sizeof(struct ral_timesync_req) && req->cmd == RAL_CMD_TIMESYNC) {
@@ -165,9 +207,15 @@ static void pipe_read (aio_t* aio) {
                 off += sizeof(struct ral_tx_req);
                 struct ral_tx_req* txreq = (struct ral_tx_req*)req;
                 struct lgw_pkt_tx_s pkt_tx;
+
+                pkt_tx.invert_pol = true;
+                pkt_tx.no_header  = false;
+
                 if( (txreq->rps & RPS_BCN) ) {  
                     pkt_tx.tx_mode = ON_GPS;
                     pkt_tx.preamble = 10;
+                    pkt_tx.invert_pol = false;
+                    pkt_tx.no_header  = true;
                 } else {
                     pkt_tx.tx_mode = TIMESTAMPED;
                     pkt_tx.preamble = 8;
@@ -178,12 +226,14 @@ static void pipe_read (aio_t* aio) {
                 pkt_tx.rf_chain   = 0;
                 pkt_tx.rf_power   = (float)(txreq->txpow - txpowAdjust)/TXPOW_SCALE;
                 pkt_tx.coderate   = CR_LORA_4_5;
-                pkt_tx.invert_pol = true;
-                pkt_tx.no_crc     = true;
-                pkt_tx.no_header  = false;
+                pkt_tx.no_crc     = !txreq->addcrc;
                 pkt_tx.size       = txreq->txlen;
                 memcpy(pkt_tx.payload, txreq->txdata, txreq->txlen);
+#if defined(CFG_sx1302)
+                int err = lgw_send(&pkt_tx);
+#else
                 int err = lgw_send(pkt_tx);
+#endif
                 if( region == 0 ) {
                     continue;
                 }
@@ -227,6 +277,8 @@ static void pipe_read (aio_t* aio) {
             }
             else if( n >= off + sizeof(struct ral_stop_req) && req->cmd == RAL_CMD_STOP) {
                 off += sizeof(struct ral_stop_req);
+                last_xtime = 0;
+                rt_clrTimer(&rxpoll_tmr);
                 lgw_stop();
                 continue;
             }

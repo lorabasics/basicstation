@@ -1,5 +1,5 @@
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -35,10 +35,14 @@ LGWVERSION.default = 5.0.1
 LGWVERSION ?= $(or ${LGWVERSION.${platform}}, ${LGWVERSION.default})
 
 HFILES = $(wildcard ${PLT}/libloragw/inc/*.h)
-SRCS = $(wildcard ${PLT}/libloragw/inc/*.c)
+SRCS = $(wildcard ${PLT}/libloragw/src/*.c)
 ARTEFACTS = ${LGWLIB} ${LGWINC} $(patsubst %, ${LGWINC}/%, $(notdir ${HFILES}) config.h)
 
-all: $(if ${HFILES},${ARTEFACTS},${PLT})
+LGW_EXTRA_CFLAGS = -DSTATIONLOG  # Enable station log integration
+
+all: platform build
+platform: ${PLT}
+build: ${ARTEFACTS}
 
 ${LGWINC}:
 	@mkdir -p $@
@@ -49,10 +53,10 @@ ${LGWLIB}: ${PLT}/libloragw/libloragw.a
 	@cp $< $@
 
 ${PLT}/libloragw/libloragw.a: ${SRCS} ${HFILES}
-	${MAKE} -C ${PLT}/libloragw libloragw.a CC=${CC} AR=${AR} LD=${LD} TDfull=${TDfull}
+	${MAKE} -C ${PLT}/libloragw libloragw.a CC="${CC}" AR="${AR}" LD="${LD}" TDfull="${TDfull}" EXTRA_CFLAGS="${LGW_EXTRA_CFLAGS}"
 
 ${PLT}/libloragw/inc/config.h: ${PLT}/libloragw/library.cfg
-	${MAKE} -C ${PLT}/libloragw inc/config.h CC=${CC} AR=${AR} LD=${LD} TDfull=${TDfull}
+	${MAKE} -C ${PLT}/libloragw inc/config.h CC="${CC}" AR="${AR}" LD="${LD}" TDfull="${TDfull}"
 
 ${LGWINC}/%.h: ${PLT}/libloragw/inc/%.h | ${LGWINC}
 	@echo "  CP    ${<F} -> $@"
@@ -60,7 +64,7 @@ ${LGWINC}/%.h: ${PLT}/libloragw/inc/%.h | ${LGWINC}
 
 ${PLT}: prep.sh
 	platform=${platform} variant=${variant} lgwversion=${LGWVERSION} ./prep.sh
-	$(MAKE) --no-print-directory all platform=${platform} variant=${variant}
+	$(MAKE) --no-print-directory build platform=${platform} variant=${variant}
 
 clean:
 	rm -rf ${ARTEFACTS}
@@ -69,4 +73,4 @@ clean:
 super-clean: clean
 	rm -rf git-repo platform-*
 
-.PHONY: all clean super-clean platform-${platform}
+.PHONY: all build clean platform super-clean 

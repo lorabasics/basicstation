@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -41,16 +41,17 @@ void rdFlashN (u4_t faddr, u4_t* daddr, uint u4cnt);
 void wrFlash1 (u4_t faddr, u4_t data);
 void wrFlashN (u4_t faddr, u4_t* daddr, uint u4cnt, int keepData);
 
-int fs_open   (str_t filename, int mode, ...);
-int fs_read   (int fd,       void* buf, int size);
-int fs_write  (int fd, const void* buf, int size);
-int fs_close  (int fd);
-int fs_rename (str_t from, str_t to);
-int fs_unlink (str_t from);
-int fs_chdir  (str_t dir);
-int fs_access (str_t fn, int mode);
-int fs_stat   (str_t fn, struct stat* st);
-int fs_lseek  (int fd, int offset, int whence);
+int  fs_open   (str_t filename, int mode, ...);
+int  fs_read   (int fd,       void* buf, int size);
+int  fs_write  (int fd, const void* buf, int size);
+int  fs_close  (int fd);
+int  fs_rename (str_t from, str_t to);
+int  fs_unlink (str_t from);
+int  fs_chdir  (str_t dir);
+int  fs_access (str_t fn, int mode);
+int  fs_stat   (str_t fn, struct stat* st);
+int  fs_lseek  (int fd, int offset, int whence);
+void fs_sync   ();
 
 int  fs_fnNormalize (const char* fn, char* wb, int maxsz);
 

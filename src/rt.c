@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -243,12 +243,12 @@ void* _rt_malloc(int size, int zero) {
 
 void* _rt_malloc_d(int size, int zero, const char* f, int l) {
     void* p = _rt_malloc(size, zero);
-    LOG (XDEBUG, "  rt_malloc(%d) %s:%d -> %p", size, f, l, p);
+    // LOG (XDEBUG, "  rt_malloc(%d) %s:%d -> %p", size, f, l, p);
     return p;
 }
 
 void _rt_free_d (void* p, const char* f, int l) {
-    LOG (XDEBUG, "  rt_free() %s:%d -> %p", f, l, p);
+    // LOG (XDEBUG, "  rt_free() %s:%d -> %p", f, l, p);
     free(p);
 }
 
@@ -267,7 +267,7 @@ char* rt_strdupn (str_t s, int n) {
 char* rt_strdupq (str_t s) { // copy and double quote a string
     if( s == NULL ) return NULL;
     int n = strlen(s);
-    char* s2 = strncpy((char*)_rt_malloc(n+3, 0)+1, s, n)-1;
+    char* s2 = (char*)memcpy((char*)_rt_malloc(n+3, 0)+1, s, n)-1;
     s2[0] = s2[n+1] = '"';
     s2[n+2] = 0;
     return s2;

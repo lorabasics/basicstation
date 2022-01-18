@@ -1,5 +1,5 @@
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -82,7 +82,7 @@ class TestLgwSimServer(su.LgwSimServer):
                 lgwsim = self.units[0]
                 await lgwsim.send_rx(rps=(7,125), freq=freq, frame=su.makeDF(fcnt=self.fcnt, port=port))
                 self.fcnt += 1
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(2.5)
         except asyncio.CancelledError:
             logger.debug('send_updf canceled.')
         except Exception as exc:
@@ -101,9 +101,13 @@ class TestMuxs(tu.Muxs):
         os._exit(status)
 
     async def handle_dntxed(self, ws, msg):
-        if [msg['seqno']] != self.exp_seqno[0:1]:
-            logger.error('DNTXED: %r\nbut expected seqno=%r' % (msg, self.exp_seqno))
+        seqno = msg['seqno']
+        if seqno != msg['diid']:
+            await self.testDone(3)
+        if [seqno] != self.exp_seqno[0:1]:
+            logger.error('DNTXED: %r but expected seqno=%r\n\t=>%r', seqno, self.exp_seqno, msg)
             await self.testDone(2)
+        logger.debug('DNTXED: %r and expected seqno=%r', seqno, self.exp_seqno)
         del self.exp_seqno[0]
 
     async def handle_updf(self, ws, msg):

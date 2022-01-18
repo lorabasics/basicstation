@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Revised 3-Clause BSD License ---
-# Copyright Semtech Corporation 2020. All rights reserved.
+# Copyright Semtech Corporation 2022. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
@@ -70,6 +70,53 @@ rm web/toobig.gz
 
 echo "---- Testing Broken HTTP Requests"
 
+function ncit () {
+    # $1 -> allow empty responses
+    # $2 -> reqlist entry
+    local REQ="${2%%~*}"
+    local REF="${2##*~}"
+    local resp="`printf "$REQ" | nc -N 127.0.0.1 8080`"
+    if [ "$REF" == "DONTCARE" ]; then
+        return 0
+    fi
+    if [ "$resp" == "" ] && [ "$REF" != "ref.empty" ]; then
+        echo "[INFO] empty response to $REQ -> expected $REF" && $1
+    else
+        diff <(echo -n "$resp") <( echo -n "`cat $REF`" ) \
+            || (echo "[FAILED] $REQ -> $REF" && false)
+    fi
+}
+
+export -f ncit # make function available to GNU parallel
+
+# - Invalid HTTP headers
+
+REQLIST=(
+"GET / HTTP/1.1\r\n \r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~DONTCARE"
+"GET\0 HTTP/1.1\n\r\n\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~DONTCARE"
+"SCHMUTZ SCHMUTZ SCHMUTZ\rSCHMUTZ\nSCHMUTZ\r\n~~~~~~~~~~~~~~~~~~~~DONTCARE"
+"SCHMUTZ SCHMUTZ SCHMUTZ\r\n\r\nSCHMUTZ\nSCHMUTZ~~~~~~~~~~~~~~~~~~DONTCARE"
+"\r\n\r\nSCHMUTZ SCHMUTZ SCHMUTZ\r\n\r\nSCHMUTZ\nSCHMUTZ~~~~~~~~~~DONTCARE"
+"\r\n\r\nSCHMUTZ\0SCHMUTZ SCHMUTZ\r\0\n\r\nSCHMUTZ\nSCHMUTZ~~~~~~~DONTCARE"
+"\\//\/\../\\/..//\/\/./\.\~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~DONTCARE"
+)
+
+NREQ=${#REQLIST[@]}
+ROUNDS=500
+
+for ((n=0;n<$ROUNDS;n++)); do
+    RND=$((RANDOM%NREQ))
+    # echo "${REQLIST[$RND]}"
+    ncit false "${REQLIST[$RND]}"
+done
+
+# Flush any remaining read buffer in station
+for i in {1..3}; do
+    ncit false "GET /a HTTP/1.1\r\nHost: localhost:8080\r\nAccept: */*\r\n\r\n~~~DONTCARE"
+done
+
+# - Valid HTTP headers
+
 REQLIST=(
 "GET /a HTTP/1.1\r\nHost: localhost:8080\r\nAccept: */*\r\n\r\n~~~ref.a"
 "GET / HTTP/1.1\r\nAuthorization: xxxxxxxxxxxxxxxxxx\r\n\r\n~~~~~~ref.index.html"
@@ -79,44 +126,22 @@ REQLIST=(
 "POST SCHMUTZ HTPP/1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.400"
 "POST_/SCHMUTZ HTTP/1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.400"
 "POST SCHMUTZ HTTP/1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.400"
-"GET / HTTP//1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.400"
-"GET / HTTP/1.1 \r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.400"
-"GET /\n HTTP/1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.400"
-"GET /\n\r HTTP/1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.400"
 "GET /not_existing_file HTTP/1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~ref.404"
 "POST /version HTTP/1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.405"
 "POP /version HTTP/1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.405"
 "VERYLONGMETHOD1_@!#_!@# /version HTTP/1.1\r\n\r\n~~~~~~~~~~~~~~~~ref.405"
-"GET / HTTP/1.1\r\n \r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.empty"
-"GET / HTTP/1.1\n\r\n\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.empty"
-"GET\0 HTTP/1.1\n\r\n\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.empty"
-"SCHMUTZ SCHMUTZ SCHMUTZ\rSCHMUTZ\nSCHMUTZ\r\n~~~~~~~~~~~~~~~~~~~~ref.empty"
-"SCHMUTZ SCHMUTZ SCHMUTZ\r\n\r\nSCHMUTZ\nSCHMUTZ~~~~~~~~~~~~~~~~~~ref.empty"
-"\r\n\r\nSCHMUTZ SCHMUTZ SCHMUTZ\r\n\r\nSCHMUTZ\nSCHMUTZ~~~~~~~~~~ref.empty"
-"\r\n\r\nSCHMUTZ\0SCHMUTZ SCHMUTZ\r\0\n\r\nSCHMUTZ\nSCHMUTZ~~~~~~~ref.empty"
-"\\//\/\../\\/..//\/\/./\.\~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.empty"
+"GET / HTTP//1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.400"
+"GET / HTTP/1.1 \r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.400"
+"GET /\n HTTP/1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.400"
+"GET /\n\r HTTP/1.1\r\n\r\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ref.400"
 )
 
 NREQ=${#REQLIST[@]}
-ROUNDS=1500
-
-function ncit () {
-    # $1 -> allow empty responses
-    local REQ="${2%%~*}"
-    local REF="${2##*~}"
-    local resp="`printf "$REQ" | nc -N 127.0.0.1 8080`"
-    if [ "$resp" == "" ] && [ "$REF" != "ref.empty" ]; then
-        echo "[WRN] Unexpected empty response to $REQ -> expected $REF" && $1
-    else
-        diff <(echo -n "$resp") <( echo -n "`cat $REF`" ) \
-            || (echo "[FAILED] $REQ -> $REF" && false)
-    fi
-}
-
-export -f ncit # make function available to GNU parallel
+ROUNDS=500
 
 for ((n=0;n<$ROUNDS;n++)); do
     RND=$((RANDOM%NREQ))
+    # echo "${REQLIST[$RND]}"
     ncit false "${REQLIST[$RND]}"
 done
 

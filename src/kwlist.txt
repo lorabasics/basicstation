@@ -4,6 +4,7 @@ antenna_type
 api
 arguments
 AS923
+AS923-1
 AS923JP
 asap
 AU915
@@ -34,6 +35,7 @@ enable
 error
 EU433
 EU863
+EU868
 euiprefix
 shell
 cmd
@@ -113,6 +115,7 @@ updf
 upgrade
 uri
 US902
+US915
 user
 version
 web_port

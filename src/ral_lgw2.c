@@ -1,6 +1,6 @@
 /*
  * --- Revised 3-Clause BSD License ---
- * Copyright Semtech Corporation 2020. All rights reserved.
+ * Copyright Semtech Corporation 2022. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -135,6 +135,7 @@ int ral_rps2sf (rps_t rps) {
 //  In this impl. we return the time the measurement took - smallest values are best values
 //
 int ral_getTimesync (u1_t pps_en, sL_t* last_xtime, timesync_t* timesync) {
+    static u4_t last_pps_xticks;
     u4_t pps_xticks;
     if( pps_en ) {
         // Note: we only get a proper latched value if a PPS egde was detected while
@@ -142,9 +143,6 @@ int ral_getTimesync (u1_t pps_en, sL_t* last_xtime, timesync_t* timesync) {
         // Therefore, read the latch value at the very beginning after a >1sec delay
         if( sx1301ar_get_trigcnt(SX1301AR_BOARD_MASTER, &pps_xticks) != 0 )
             goto failed;
-    } else {
-        // Signal no PPS
-        timesync->pps_xtime = 0;
     }
     u4_t hs_pps = 0;
     if( sx1301ar_get_trighs(SX1301AR_BOARD_MASTER, &hs_pps) != 0 ) hs_pps = 0;
@@ -159,18 +157,19 @@ int ral_getTimesync (u1_t pps_en, sL_t* last_xtime, timesync_t* timesync) {
     sL_t d = (s4_t)(xticks - *last_xtime);
     if( d < 0 ) {
         LOG(MOD_SYN|CRITICAL,
-            "SX1301 time sync roll over - no update for a long time: xticks=0x%lX last_xtime=%0xlX",
+            "SX1301 time sync roll over - no update for a long time: xticks=0x%08x last_xtime=0x%lX",
             xticks, *last_xtime);
         d += (sL_t)1<<32;
     }
     timesync->xtime = *last_xtime += d;
     timesync->ustime = (t0+t1)/2;
-    if( pps_en ) {
+    timesync->pps_xtime = 0; // Will be set if pps_en is set and valid PPS observation is available
+    if( pps_en && pps_xticks && last_pps_xticks != pps_xticks ) {
         timesync->pps_xtime = timesync->xtime + (s4_t)(pps_xticks - xticks);
-    } else {
-        // Signal no PPS
-        timesync->pps_xtime = 0;
+        last_pps_xticks = pps_xticks;
     }
+    LOG(MOD_SYN|XDEBUG, "SYNC: ustime=0x%012lX (Q=%3d): xticks=0x%08x xtime=0x%lX - PPS: pps_xticks=0x%08x (%u) pps_xtime=0x%lX (pps_en=%d)",
+        timesync->ustime, (int)(t1-t0), xticks, timesync->xtime, pps_xticks, pps_xticks, timesync->pps_xtime, pps_en);
     return (int)(t1-t0);
   failed:
     LOG(MOD_SYN|CRITICAL, "SX1301 time sync failed: %s", sx1301ar_err_message(sx1301ar_errno));
@@ -193,10 +192,15 @@ u1_t ral_altAntennas (u1_t txunit) {
 int ral_tx (txjob_t* txjob, s2ctx_t* s2ctx, int nocca) {
     sx1301ar_tx_pkt_t pkt_tx = sx1301ar_init_tx_pkt();
 
+    pkt_tx.invert_pol = true;
+    pkt_tx.no_header  = false;
+
     if( txjob->preamble == 0 ) {
         if( txjob->txflags & TXFLAG_BCN ) {
             pkt_tx.tx_mode = TX_ON_GPS;
             pkt_tx.preamble = 10;
+            pkt_tx.invert_pol = false;
+            pkt_tx.no_header  = true;
         } else {
             pkt_tx.tx_mode = TX_TIMESTAMPED;
             pkt_tx.preamble = 8;
@@ -211,10 +215,8 @@ int ral_tx (txjob_t* txjob, s2ctx_t* s2ctx, int nocca) {
     pkt_tx.rf_chain   = 0;  
     pkt_tx.rf_power   = (float)(txjob->txpow - txpowAdjust) / TXPOW_SCALE;
     pkt_tx.coderate   = CR_4_5;
-    pkt_tx.invert_pol = true;
     pkt_tx.no_crc     = !txjob->addcrc;
-    pkt_tx.no_header  = false;
-    pkt_tx.size = txjob->len;
+    pkt_tx.size       = txjob->len;
     memcpy(pkt_tx.payload, &s2ctx->txq.txdata[txjob->off], pkt_tx.size);
 
     // NOTE: nocca not possible to implement with current libloragw API
