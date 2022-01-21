@@ -1,0 +1,21 @@
+version: 2
+
+services:
+
+  basicstation:
+    build: .
+    container_name: basicstation
+    restart: unless-stopped
+    privileged: true
+    network_mode: host      # required to read main interface MAC instead of virtual one
+    environment:
+      MODEL: "SX1301"
+      GW_GPS: "false"
+      GW_RESET_GPIO: 17
+      GW_ENABLE_GPIO: 0
+      TTN_STACK_VERSION: 3
+      TTN_REGION: "eu1"
+      #TC_URI:              # uses TTN server by default, based on the TTN_STACK_VERSION and TTN_REGION variables
+      #TC_TRUST:            # uses TTN certificates by default
+      TC_KEY:
+      #EUI_ADDRESS:         # required if you use a Pi Zero W or Pi Zero 2 W
