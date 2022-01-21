@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 
 TAG_KEY="EUI"
-TTN_EUI=$(cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1fffe\2#g')
+
+if [ -z ${EUI_ADDRESS} ] ;
+ then
+    TTN_EUI=$(cat /sys/class/net/eth0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1fffe\2#g')
+ else
+    echo "Using DEVICE: $EUI_ADDRESS"
+    TTN_EUI=$(cat /sys/class/net/wlan0/address | sed -r 's/[:]+//g' | sed -e 's#\(.\{6\}\)\(.*\)#\1fffe\2#g')
+fi
+
 
 echo "Gateway EUI: $TTN_EUI"
 

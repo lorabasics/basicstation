@@ -204,9 +204,12 @@ static void findDefaultEui () {
         if( ifc[0] != 0 ) {
             if( strncmp(ifc, "eth", 3) == 0 && strncmp(dname, "eth", 3) != 0 )
                 continue; // eth trumps other devices
+            // in case there is no eth0
+            if( strncmp(ifc, "wla", 3) == 0 && strncmp(dname, "wla", 3) != 0 )
+                continue; // wlan trumps other devices
             // Otherwie choose alphabetically lowest - unless eth replaces something else
             if( !((strncmp(ifc, "eth", 3) == 0) ^ (strncmp(dname, "eth", 3) == 0))
-                && strcmp(ifc, dname) <= 0 )
+                && strcmp(ifc, dname) > 0 )
                 continue; // not lower
         }
         strcpy(ifc, dname);
@@ -219,6 +222,7 @@ static void findDefaultEui () {
         protoEUI = eui;
         rt_free((void*)protoEuiSrc);
         protoEuiSrc = rt_strdup(path);
+        LOG(MOD_SYS|INFO, "findDefaultEui -> protoEuiSrc %s - protoEUI %lu", protoEuiSrc, protoEUI);
     }
 }
 
@@ -366,7 +370,7 @@ void sys_ini () {
         logfile.path==NULL ? "stderr" : logfile.path, logfile.size, logfile.rotate);
     LOG(MOD_SYS|INFO, "Station Ver : %s",  CFG_version " " CFG_bdate);
     LOG(MOD_SYS|INFO, "Package Ver : %s",  sys_version());
-    LOG(MOD_SYS|INFO, "proto EUI   : %:E\t(%s)", protoEUI, protoEuiSrc);
+    LOG(MOD_SYS|INFO, "proto EUI(x) : %:E\t(%s)", protoEUI, protoEuiSrc);
     LOG(MOD_SYS|INFO, "prefix EUI  : %:E\t(%s)", prefixEUI, prefixEuiSrc);
     LOG(MOD_SYS|INFO, "Station EUI : %:E", sys_eui());
     LOG(MOD_SYS|INFO, "Station home: %s\t(%s)",  homeDir, homeDirSrc);

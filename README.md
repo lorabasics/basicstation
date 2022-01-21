@@ -14,8 +14,8 @@ The Basics™ Station protocol enables the LoRa gateways with a reliable and sec
 
 ### Hardware
 
-* Raspberry Pi 3/4 or [balenaFin](https://www.balena.io/fin/)
-* SD card in case of the RPi 4
+* Raspberry Pi 0, 3/4 or [balenaFin](https://www.balena.io/fin/)
+* SD card in case of the RPi 0/3/4
 
 #### LoRa Concentrators (SPI)
 
@@ -146,6 +146,8 @@ Variable Name | Value | Description | Default
 **`TC_TRUST`** | `STRING` | Certificate for the server | Automatically retrieved from LetsEncryt based on the `TTN_STACK_VERSION` value
 **`MODEL`** | `STRING` | ```SX1301``` or ```SX1302``` | ```SX1301```
 **`TC_URI`** | `STRING` | basics station TC URI to get connected.  | 
+**`EUI_ADDRESS`** | `STRING` | In case you use Raspberry Pi Zero without `eth0` you can use this to generate the `EUI` from `wlan0` instead of another network interface. You will need to add `wlan0` | 
+
 
 #### The Things Stack (TTS) Specific Variables (V3)
 
