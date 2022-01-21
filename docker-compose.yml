@@ -18,4 +18,4 @@ services:
       #TC_URI:              # uses TTN server by default, based on the TTN_STACK_VERSION and TTN_REGION variables
       #TC_TRUST:            # uses TTN certificates by default
       TC_KEY:
-      #DEVICE:              # required if you use a Pi Zero W or Pi Zero 2 W
+      #EUI_ADDRESS:         # required if you use a Pi Zero W or Pi Zero 2 W
