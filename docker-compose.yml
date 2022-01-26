@@ -19,3 +19,5 @@ services:
       #TC_TRUST:            # uses TTN certificates by default
       TC_KEY:
       #EUI_ADDRESS:         # required if you use a Pi Zero W or Pi Zero 2 W
+    labels:
+      io.balena.features.balena-api: '1'
