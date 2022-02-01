@@ -36,6 +36,9 @@ station:
 sim: station
 	PATH=${TD}/build-${platform}-${variant}/bin:${PATH} python sim.py
 
+stationsim: station
+	PATH=${TD}/build-${platform}-${variant}/bin:${PATH} python sim.py stationsim
+
 tmux: station
 	@if [ -z "${TMUX}" ]; then \
 		echo "Starting new tmux session" ; \
