@@ -40,6 +40,10 @@ variant  ?= std
 
 LOCAL_ARCH := $(shell gcc -dumpmachine)
 
+ifeq (${LOCAL_ARCH},armv7l-unknown-linux-gnueabihf)
+LOCAL_ARCH = arm-linux-gnueabihf
+endif
+
 ARCH.linux   = x86_64-linux-gnu
 ARCH.linuxV2 = x86_64-linux-gnu
 ARCH.linuxpico = x86_64-linux-gnu
