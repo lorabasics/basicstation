@@ -22,8 +22,8 @@ WORKDIR /home/nonprivuser
 # system packages
 RUN sudo apt-get install --no-install-recommends -yq \
         git psmisc build-essential lcov curl netcat-openbsd \
-        python3 python3-pip python3-setuptools python3-wheel \
-        > /dev/null && \
+        python3 python3-dev python3-pip python3-setuptools \
+	python3-wheel > /dev/null && \
         sudo apt-get clean -q && \
         sudo ln -s /usr/bin/python3 /usr/bin/python
 
