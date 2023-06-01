@@ -40,6 +40,7 @@
 #include "ral.h"
 #include "lgw/loragw_reg.h"
 #include "lgw/loragw_hal.h"
+#include "lorawan_filter.h"
 #if defined(CFG_sx1302)
 #include "lgw/loragw_sx1302_timestamp.h"
 extern timestamp_counter_t counter_us; // from loragw_sx1302.c
@@ -185,7 +186,7 @@ static tmr_t      syncTmr;
 
 
 
-// ATTR_FASTCODE 
+// ATTR_FASTCODE
 static void synctime (tmr_t* tmr) {
     timesync_t timesync;
     int quality = ral_getTimesync(pps_en, &last_xtime, &timesync);
@@ -295,7 +296,52 @@ static void log_rawpkt(u1_t level, str_t msg, struct lgw_pkt_rx_s * pkt_rx) {
     );
 }
 
-//ATTR_FASTCODE 
+/*匹配哈希表的dev mac 成功返回 0 失败返回 -1*/
+static int lorawan_filter_handler(void)
+{
+    int             value    = lorawan_filter()->mote_addr;
+    dev_addr_htn_t *dev_node = NULL;
+    unsigned long   hash     = jhash(&value, sizeof(value), lorawan_filter()->seed);
+    bool            is_exist = false;
+    urcu_memb_read_lock();
+    cds_lfht_for_each_entry_duplicate(
+        lorawan_filter()->dev_ht, hash, match, &value, &(lorawan_filter()->iter), dev_node, node)
+    {
+        // MSG("DEBUG: filter dev mac :%08X \n", dev_node->value);
+        if (dev_node->value == value) {
+            is_exist = true;
+            break;
+        }
+    }
+    urcu_memb_read_unlock();
+    if (is_exist) {
+        MSG("INFO: mac ok :%08X \n", value);
+        return 0;
+    }
+    MSG("INFO:mac not ok :%08X \n", value);
+    return -1;
+}
+
+/* Get mote information from current packet (addr, fcnt) */
+static void get_remote_info_from_packet(struct lgw_pkt_rx_s *pkt_rx)
+{
+    /* FHDR - DevAddr */
+    if (pkt_rx->size >= 8) {
+        lorawan_filter()->mote_addr = pkt_rx->payload[1];
+        lorawan_filter()->mote_addr |= pkt_rx->payload[2] << 8;
+        lorawan_filter()->mote_addr |= pkt_rx->payload[3] << 16;
+        lorawan_filter()->mote_addr |= pkt_rx->payload[4] << 24;
+        /* FHDR - FCnt */
+        lorawan_filter()->mote_fcnt = pkt_rx->payload[6];
+        lorawan_filter()->mote_fcnt |= pkt_rx->payload[7] << 8;
+    } else {
+        lorawan_filter()->mote_addr = 0;
+        lorawan_filter()->mote_fcnt = 0;
+    }
+    // MSG("DEBUG: mote addr is %08X \n", lorawan_filter()->mote_addr);
+}
+
+//ATTR_FASTCODE
 static void rxpolling (tmr_t* tmr) {
     int rounds = 0;
     while(rounds++ < RAL_MAX_RXBURST) {
@@ -308,7 +354,10 @@ static void rxpolling (tmr_t* tmr) {
         if( n==0 ) {
             break;
         }
-
+        get_remote_info_from_packet(&pkt_rx);
+        if (lorawan_filter_handler() != 0) {
+            continue;
+        }
         rxjob_t* rxjob = !TC ? NULL : s2e_nextRxjob(&TC->s2ctx);
         if( rxjob == NULL ) {
             log_rawpkt(ERROR, "Dropped RX frame - out of space: ", &pkt_rx);

@@ -50,7 +50,7 @@
 #include "sys_linux.h"
 #include "fs.h"
 #include "selftests.h"
-
+#include "lorawan_filter.h"
 #include "mbedtls/version.h"
 
 extern char* makeFilepath (const char* prefix, const char* suffix, char** pCachedFile, int isReadable); // sys.c
@@ -112,6 +112,8 @@ static void handle_signal (int signum) {
     // and enable signals only when hanging in pselect
     // Termination code throughout station tries first SIGTERM and after a while SIGKILL, thus,
     // we should not end up with a station process lingering.
+    delete_dev_ht_node();
+    urcu_memb_unregister_thread();
     exit(128+signum);
     // Signal safe but less convenient
     //_exit(128+signum);
@@ -1048,7 +1050,7 @@ static void startupMaster (tmr_t* tmr) {
     atexit(leds_off);
     // Wait until slaves are up
     //startupMaster2(tmr);
-    rt_setTimerCb(tmr, rt_millis_ahead(200), startupMaster2); 
+    rt_setTimerCb(tmr, rt_millis_ahead(200), startupMaster2);
 }
 
 
@@ -1095,7 +1097,7 @@ static void startupDaemon (tmr_t* tmr) {
 int sys_main (int argc, char** argv) {
     // Because we log even before rt_ini()...
     rt_utcOffset = sys_utc() - rt_getTime();
-
+    urcu_memb_register_thread();
     signal(SIGHUP,  SIG_IGN);
     signal(SIGINT,  handle_signal);
     signal(SIGTERM, handle_signal);
@@ -1303,6 +1305,7 @@ int sys_main (int argc, char** argv) {
 
     rt_yieldTo(&startupTmr, daemon ? startupDaemon : startupMaster);
     aio_loop();
+    urcu_memb_unregister_thread();
     // NOT REACHED
     assert(0);
 }

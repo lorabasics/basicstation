@@ -122,6 +122,7 @@ PERSOH = $(if ${PERSO},perso.h,)
 
 # Paths to dependencies
 MBEDLIBS = -lmbedtls -lmbedx509 -lmbedcrypto
+URCULIBS = -lurcu-cds -lurcu
 
 # -lm: Needed for lgw which uses pow/ceil
 ifneq (minihub,$(platform))
@@ -137,12 +138,12 @@ CFLAGS.linux.testfs   = -g -O0 --coverage
 CFLAGS.linux.testpin  = -g -O3
 CFLAGS.linux.std      = -g -O3
 
-LIBS.linux   = -llgw   ${MBEDLIBS}      -lpthread
-LIBS.linuxV2 = -llgw2  ${MBEDLIBS} -lrt -lpthread -lspi
-LIBS.linuxpico = -llgw ${MBEDLIBS}      -lpthread
-LIBS.corecell = -llgw1302  ${MBEDLIBS}      -lpthread -lrt
-LIBS.rpi     = -llgw   ${MBEDLIBS}      -lpthread
-LIBS.kerlink = -llgw   ${MBEDLIBS} -lrt -lpthread
+LIBS.linux   = -llgw   ${MBEDLIBS}      -lpthread   ${URCULIBS}
+LIBS.linuxV2 = -llgw2  ${MBEDLIBS} -lrt -lpthread -lspi ${URCULIBS}
+LIBS.linuxpico = -llgw ${MBEDLIBS}      -lpthread ${URCULIBS}
+LIBS.corecell = -llgw1302  ${MBEDLIBS}      -lpthread -lrt ${URCULIBS}
+LIBS.rpi     = -llgw   ${MBEDLIBS}      -lpthread ${URCULIBS}
+LIBS.kerlink = -llgw   ${MBEDLIBS} -lrt -lpthread ${URCULIBS}
 
 xCFG     =     ${CFG.${ARCH}}     ${CFG.${platform}}     ${CFG.${variant}}    ${CFG.${platform}.${variant}}
 xCFLAGS  =  ${CFLAGS.${ARCH}}  ${CFLAGS.${platform}}  ${CFLAGS.${variant}} ${CFLAGS.${platform}.${variant}}
