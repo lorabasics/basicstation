@@ -55,6 +55,8 @@ cd basicstation
 make platform=rpi variant=std
 ```
 
+If you're running a 64-bit Raspbian, substitute `platform=rpi` with `platform=rpi64`.
+
 The build process consists of the following steps:
 
 *  Fetch and build dependencies, namely [mbedTLS](https://github.com/ARMmbed/mbedtls) and [libloragw](https://github.com/Lora-net/lora_gateway)

@@ -50,4 +50,12 @@ if [[ ! -d platform-${platform} ]]; then
         echo "Applying ${lgwversion}-${platform}.patch ..."
         git apply ../${lgwversion}-${platform}.patch
     fi
+    # share the same patch set for rpi and rpi64 platforms.
+    if [ "${platform}" = "rpi64" ]; then
+        echo "Treating rpi64 platform as rpi for patching/dependency purposes..."
+        if [ -f ../${lgwversion}-rpi.patch ]; then
+            echo "Applying ${lgwversion}-rpi.patch ..."
+            git apply ../${lgwversion}-rpi.patch
+        fi
+    fi
 fi

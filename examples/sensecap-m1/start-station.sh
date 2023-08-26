@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # --- Revised 3-Clause BSD License ---
 # Copyright Semtech Corporation 2022. All rights reserved.
@@ -26,36 +26,63 @@
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set -e
-cd $(dirname $0)
 
-lgwversion="v${lgwversion:-5.0.1}"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
 
-if [[ ! -d git-repo ]]; then
-    git clone https://github.com/Lora-net/lora_gateway.git git-repo
+# A POSIX variable
+OPTIND=1         # Reset in case getopts has been used previously in the shell.
+
+# Initialize our own variables:
+lns_config=""
+variant=std
+
+show_help()
+{
+   printf "$GREEN"
+   printf "\tUsage: ./start-station.sh -l {lns-home} -d\n"
+   printf "\t-l : LNS configuration folder \n"
+   printf "\t-d : To run debug variant of station\n"
+   printf "$NC"
+   printf "\t\t e.g: ./start-station.sh -l ./lns-ttn\n"
+   printf "\t\t      ./start-station.sh -dl ./lns-ttn\n"
+   exit
+}
+
+
+while getopts "h?dl:" opt; do
+    case "$opt" in
+    h|\?)
+        show_help
+        exit 0
+        ;;
+    d)  variant=debug
+        ;;
+    l)  lns_config=$OPTARG
+        ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+[ "${1:-}" = "--" ] && shift
+
+
+if [ -z "$lns_config" ]; then
+	printf "$RED"
+	printf "$RED \tError: No LNS home folder provided$NC\n"
+	printf "$NC"
+	show_help
 fi
 
-if [[ -z "${platform}" ]] || [[ -z "${variant}" ]]; then
-    echo "Expecting env vars platform/variant to be set - comes naturally if called from a makefile"
-    echo "If calling manually try: variant=std platform=linux $0"
-    exit 1
-fi
+STATION_BIN="../../build-rpi64-$variant/bin/station"
 
-if [[ ! -d platform-${platform} ]]; then
-    git clone -b ${lgwversion} git-repo platform-${platform}
 
-    cd platform-${platform}
-    if [ -f ../${lgwversion}-${platform}.patch ]; then
-        echo "Applying ${lgwversion}-${platform}.patch ..."
-        git apply ../${lgwversion}-${platform}.patch
-    fi
-
-    # share the same patch set for rpi and rpi64 platforms.
-    if [ "${platform}" = "rpi64" ]; then
-        echo "Treating rpi64 platform as rpi for patching/dependency purposes..."
-        if [ -f ../${lgwversion}-rpi.patch ]; then
-            echo "Applying ${lgwversion}-rpi.patch ..."
-            git apply ../${lgwversion}-rpi.patch
-        fi
-    fi
+if [ -f "$STATION_BIN" ]; then
+	printf "Using variant=$variant, lns_config='$lns_config'\n"
+	printf "$GREEN Starting Station ... $NC\n"
+	$STATION_BIN -h $lns_config
+else
+	printf "$RED [ERROR]: Binary not found @ $STATION_BIN $NC\n"
 fi
