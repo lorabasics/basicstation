@@ -45,6 +45,7 @@ ARCH.linuxV2 = x86_64-linux-gnu
 ARCH.linuxpico = x86_64-linux-gnu
 ARCH.corecell  = arm-linux-gnueabihf
 ARCH.rpi     = arm-linux-gnueabihf
+ARCH.rpi64   = aarch64-linux-gnu
 ARCH.kerlink = arm-klk-linux-gnueabi
 ARCH=${ARCH.${platform}}
 
