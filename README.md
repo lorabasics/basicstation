@@ -1,5 +1,11 @@
 # LoRa Basics™ Station using balena.io with sx1301, sx1302 and sx1303 LoRa concentrators
 
+## This project is deprecated! You can see the balena basicstation updated here
+
+[https://github.com/xoseperez/basicstation](https://github.com/xoseperez/basicstation)
+
+---
+
 This project deploys a LoRaWAN gateway with Basics™ Station Packet Forward protocol with balena. It runs on a Raspberry Pi (3/4) or balenaFin with sx1301, sx1302 and sx1303 SPI LoRa concentrators (e.g. RAK833, RAK2245, RAK2287, RAK5146, Seeed WM1302 and IMST iC880a among others).
 
 
