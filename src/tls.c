@@ -28,7 +28,6 @@
 
 #include "mbedtls/net_sockets.h"
 #include "mbedtls/ssl.h"
-#include "mbedtls/certs.h"
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/error.h"
@@ -230,7 +229,12 @@ int tls_setMyCert (tlsconf_t* conf, const char* cert, int certlen, const char* k
         keyb = (u1_t*)dbuf.buf;
         keyl = dbuf.bufsize+1;
     }
-    if( (ret = mbedtls_pk_parse_key(mykey, keyb, keyl, (const u1_t*)pwd, pwd?strlen(pwd):0)) != 0 ) {
+    ret = mbedtls_pk_parse_key(mykey, keyb, keyl, (const u1_t*)pwd, pwd?strlen(pwd):0
+#if MBEDTLS_VERSION_NUMBER >= 0x03000000 /* mbedtls 3.0.0 */
+                               , mbedtls_ctr_drbg_random, assertDBRG()
+#endif
+                              );
+    if( ret != 0 ) {
         log_mbedError(ERROR, ret, "Parsing key");
         goto errexit;
     }

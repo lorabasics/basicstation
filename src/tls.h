@@ -30,7 +30,11 @@
 #define _tls_h_
 
 #include "mbedtls/ssl.h"
-#include "mbedtls/net.h"
+#if MBEDTLS_VERSION_NUMBER < 0x02040000L
+#include <mbedtls/net.h>
+#else
+#include "mbedtls/net_sockets.h"
+#endif
 
 typedef struct tlsconf tlsconf_t;
 typedef struct mbedtls_ssl_context* tlsctx_p;

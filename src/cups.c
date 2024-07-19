@@ -38,6 +38,9 @@
 #include "mbedtls/sha512.h"
 #include "mbedtls/bignum.h"
 
+#ifndef MBEDTLS_PRIVATE
+#define MBEDTLS_PRIVATE(x) x
+#endif
 
 #define FAIL_CNT_THRES 6
 #define SIGCRC_LEN 4
@@ -72,12 +75,12 @@ static int cups_verifySig (cups_sig_t* sig) {
         mbedtls_ecdsa_context ecdsa;
         mbedtls_ecdsa_init(&ecdsa);
         int ret;
-        if ((ret = mbedtls_ecp_group_load        (&k.grp, MBEDTLS_ECP_DP_SECP256R1) ) ||
-            (ret = mbedtls_mpi_read_binary       (&k.Q.X, (u1_t*)key.buf, 32)       ) ||
-            (ret = mbedtls_mpi_read_binary       (&k.Q.Y, (u1_t*)key.buf+32, 32)    ) ||
-            (ret = mbedtls_mpi_lset              (&k.Q.Z, 1)                        ) ||
-            (ret = mbedtls_ecp_check_pubkey      (&k.grp, &k.Q)                     ) ||
-            (ret = mbedtls_ecdsa_from_keypair    (&ecdsa, &k)                       ) ||
+        if ((ret = mbedtls_ecp_group_load        (&k.MBEDTLS_PRIVATE(grp), MBEDTLS_ECP_DP_SECP256R1)               ) ||
+            (ret = mbedtls_mpi_read_binary       (&k.MBEDTLS_PRIVATE(Q).MBEDTLS_PRIVATE(X), (u1_t*)key.buf, 32)    ) ||
+            (ret = mbedtls_mpi_read_binary       (&k.MBEDTLS_PRIVATE(Q).MBEDTLS_PRIVATE(Y), (u1_t*)key.buf+32, 32) ) ||
+            (ret = mbedtls_mpi_lset              (&k.MBEDTLS_PRIVATE(Q).MBEDTLS_PRIVATE(Z), 1)                     ) ||
+            (ret = mbedtls_ecp_check_pubkey      (&k.MBEDTLS_PRIVATE(grp), &k.MBEDTLS_PRIVATE(Q))                  ) ||
+            (ret = mbedtls_ecdsa_from_keypair    (&ecdsa, &k)                                                      ) ||
             (ret = mbedtls_ecdsa_read_signature  (&ecdsa, sig->hash, sizeof(sig->hash), sig->signature, sig->len ))
          ) {
             verified = 0;
