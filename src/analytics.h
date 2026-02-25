@@ -127,5 +127,6 @@ void ana_send_stat(const struct ana_stat* stat);
 void ana_count_rx(uint8_t crc_ok, uint8_t forwarded);
 void ana_count_tx_received(void);
 void ana_count_tx_emitted(void);
+void ana_set_temperature(float temp);
 
 #endif /* _analytics_h_ */

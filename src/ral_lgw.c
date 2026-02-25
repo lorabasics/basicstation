@@ -183,6 +183,10 @@ static s2_t       txpowAdjust;    // scaled by TXPOW_SCALE
 static sL_t       last_xtime;
 static tmr_t      rxpollTmr;
 static tmr_t      syncTmr;
+#if defined(CFG_sx1302)
+static ustime_t   last_temp_read;
+#define TEMP_READ_INTERVAL_US  (30 * 1000000LL)
+#endif
 
 
 
@@ -354,6 +358,19 @@ static void rxpolling (tmr_t* tmr) {
 
     }
     s2e_flushRxjobs(&TC->s2ctx);
+
+#if defined(CFG_sx1302)
+    {
+        ustime_t now = rt_getTime();
+        if (now - last_temp_read >= TEMP_READ_INTERVAL_US) {
+            float temp;
+            if (lgw_get_temperature(&temp) == LGW_HAL_SUCCESS)
+                ana_set_temperature(temp);
+            last_temp_read = now;
+        }
+    }
+#endif
+
     rt_setTimer(tmr, rt_micros_ahead(RX_POLL_INTV));
 }
 

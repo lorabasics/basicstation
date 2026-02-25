@@ -767,8 +767,8 @@ static void s2e_bcntimeout (tmr_t* tmr) {
     ustime_t now = rt_getTime();
     sL_t xtime = ts_ustime2xtime(0, now);
     sL_t gpstime = ts_xtime2gpstime(xtime);
-    double lat, lon;
-    int latlon_ok = sys_getLatLon(&lat, &lon);
+    double lat, lon, alt;
+    int latlon_ok = sys_getLatLon(&lat, &lon, &alt);
     u1_t state = (gpstime ? BCNING_OK:BCNING_NOTIME) | (latlon_ok?BCNING_OK:BCNING_NOPOS);
 
     if( state != s2ctx->bcn.state ) {

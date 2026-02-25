@@ -115,6 +115,6 @@ void   sys_stopWeb ();
 
 void   sys_keepAlive (int fd);
 
-int    sys_getLatLon (double* lat, double* lon);
+int    sys_getLatLon (double* lat, double* lon, double* alt);
 
 #endif // _sys_h_

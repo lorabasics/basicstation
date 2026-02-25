@@ -35,6 +35,12 @@ int sys_enableGPS (str_t _device) {
     return 0;
 }
 
+int sys_getLatLon (double* lat, double* lon, double* alt) {
+    *lat = *lon = 0.0;
+    if (alt) *alt = 0.0;
+    return 0;
+}
+
 #else // ! defined(CFG_nogps)
 
 #include <unistd.h>
@@ -603,9 +609,10 @@ static int gps_reopen () {
 }
 
 
-int sys_getLatLon (double* lat, double* lon) {
+int sys_getLatLon (double* lat, double* lon, double* alt) {
     *lat = orig_lat;
     *lon = orig_lon;
+    if (alt) *alt = last_alt;
     return 1;
 }
 

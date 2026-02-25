@@ -40,6 +40,7 @@
 #include "rt.h"
 #include "analytics.h"
 #include "s2e.h"
+#include "sys.h"
 #include "xq.h"
 #include "timesync.h"
 
@@ -58,6 +59,7 @@ static uint32_t ana_rx_ok;
 static uint32_t ana_rx_forwarded;
 static uint32_t ana_tx_received;
 static uint32_t ana_tx_emitted;
+static float    ana_temp = 0.0f / 0.0f;  /* NAN until set by RAL */
 
 static tmr_t ana_stat_tmr;
 
@@ -72,16 +74,25 @@ static void ana_stat_timeout(tmr_t* tmr) {
     msg.hdr.type = ANA_STAT;
     msg.hdr.reserved = 0;
     msg.gw_time_us = (int64_t)rt_getUTC();
-    msg.latitude = 0.0f / 0.0f;  /* NAN */
-    msg.longitude = 0.0f / 0.0f;
-    msg.altitude = 0.0f / 0.0f;
+
+    double lat, lon, alt;
+    if (sys_getLatLon(&lat, &lon, &alt)) {
+        msg.latitude  = (float)lat;
+        msg.longitude = (float)lon;
+        msg.altitude  = (float)alt;
+    } else {
+        msg.latitude  = 0.0f / 0.0f;  /* NAN */
+        msg.longitude = 0.0f / 0.0f;
+        msg.altitude  = 0.0f / 0.0f;
+    }
+
     msg.rx_packets = ana_rx_packets;
     msg.rx_ok = ana_rx_ok;
     msg.rx_forwarded = ana_rx_forwarded;
     msg.tx_received = ana_tx_received;
     msg.tx_emitted = ana_tx_emitted;
     msg.is_gauge = 0;
-    msg.temperature = 0.0f / 0.0f;  /* NAN */
+    msg.temperature = ana_temp;
 
     ssize_t n = sendto(ana_fd, &msg, sizeof(msg), MSG_DONTWAIT,
                        (struct sockaddr*)&ana_addr, ana_addrlen);
@@ -257,4 +268,8 @@ void ana_count_tx_received(void) {
 
 void ana_count_tx_emitted(void) {
     ana_tx_emitted++;
+}
+
+void ana_set_temperature(float temp) {
+    ana_temp = temp;
 }
