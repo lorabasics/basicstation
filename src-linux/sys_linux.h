@@ -54,5 +54,6 @@ void     sys_writeFile (str_t filename, dbuf_t* data);
 void     sys_startupSlave (int rdfd, int wrfd);
 int      sys_enableGPS (str_t device);
 void     sys_enableCmdFIFO (str_t file);
+str_t    sys_analyticsPath (void);
 
 #endif // _sys_linux_h_

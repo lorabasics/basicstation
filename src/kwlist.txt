@@ -120,6 +120,7 @@ user
 version
 web_port
 web_dir
+analytics_sock
 xtime
 # ----------------------------------------
 # sx1301 conf

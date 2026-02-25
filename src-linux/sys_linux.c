@@ -50,6 +50,7 @@
 #include "sys_linux.h"
 #include "fs.h"
 #include "selftests.h"
+#include "analytics.h"
 
 #include "mbedtls/version.h"
 
@@ -102,6 +103,7 @@ static int    updfd = -1;
 static str_t  protoEuiSrc;
 static str_t  prefixEuiSrc;
 static str_t  radioInitSrc;
+static str_t  analyticsSock;
 
 
 static void handle_signal (int signum) {
@@ -335,6 +337,11 @@ str_t sys_radioDevice (str_t device, u1_t* comtype) {
 }
 
 
+str_t sys_analyticsPath (void) {
+    return analyticsSock;
+}
+
+
 void sys_fatal (int code) {
     exit(code==0 ? FATAL_GENERIC : code);
 }
@@ -386,6 +393,7 @@ static void killOldPid () {
 
 
 static void leds_off () {
+    ana_close();
     sys_inState(SYSIS_STATION_DEAD);
 }
 
@@ -408,6 +416,9 @@ void sys_ini () {
     }
     if( sys_noTC || sys_noCUPS ) {
         LOG(MOD_SYS|WARNING, "Station in NO-%s mode", sys_noTC ? "TC" : "CUPS");
+    }
+    if( sys_analyticsPath() ) {
+        ana_open(sys_analyticsPath(), sys_eui());
     }
     int seed;
     sys_seed((u1_t*)&seed, sizeof(seed));
@@ -792,6 +803,11 @@ static int parseStationConf () {
                     setWebDir(uj_str(&D), filename);
                     break;
                 }
+                case J_analytics_sock: {
+                    free((void*)analyticsSock);
+                    analyticsSock = rt_strdup(uj_str(&D));
+                    break;
+                }
                 default: {
                     dbuf_t b = uj_skipValue(&D);
                     int err = s2conf_set(filename, D.field.name, rt_strdupn(b.buf, b.bufsize));
@@ -827,6 +843,7 @@ static struct opts {
     str_t tempDir;
     str_t radioInit;
     str_t euiprefix;
+    str_t analytics;
     int   slaveMode;
     str_t slaveExec;
     u1_t  params;
@@ -869,6 +886,10 @@ static struct argp_option options[] = {
        "ff:fe00:0 then the EUI is formed by inserting FFFE in the middle. "
        "If absent use MAC or routerid as is. "
        "Overrides environment STATION_EUIPREFIX.")
+    },
+    { "analytics", 'A', "PATH", 0,
+      ("Unix socket path for analytics side-channel. "
+       "Overrides environment STATION_ANALYTICS.")
     },
     { "params", 'p', NULL, 0,
       ("Print current parameter settings.")
@@ -974,6 +995,10 @@ static int parse_opt (int key, char* arg, struct argp_state* state) {
     }
     case 'i': {
         opts->radioInit = arg;
+        return 0;
+    }
+    case 'A': {
+        opts->analytics = arg;
         return 0;
     }
     case 'p': {
@@ -1221,6 +1246,18 @@ int sys_main (int argc, char** argv) {
         str_t v = getenv(source);
         if( v && !setLogLevel(v, source) )
             return 1;
+    }
+    if( opts->analytics ) {
+        free((void*)analyticsSock);
+        analyticsSock = rt_strdup(opts->analytics);
+        setenv("STATION_ANALYTICS", analyticsSock, 1);
+    } else {
+        str_t source = "STATION_ANALYTICS";
+        str_t v = getenv(source);
+        if( v ) {
+            free((void*)analyticsSock);
+            analyticsSock = rt_strdup(v);
+        }
     }
     {
         str_t source = "STATION_TLSDBG";

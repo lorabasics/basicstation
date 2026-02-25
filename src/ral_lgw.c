@@ -40,6 +40,7 @@
 #include "ral.h"
 #include "lgw/loragw_reg.h"
 #include "lgw/loragw_hal.h"
+#include "analytics.h"
 #if defined(CFG_sx1302)
 #include "lgw/loragw_sx1302_timestamp.h"
 extern timestamp_counter_t counter_us; // from loragw_sx1302.c
@@ -315,6 +316,7 @@ static void rxpolling (tmr_t* tmr) {
             break; // Allow to flush RX jobs
         }
         if( pkt_rx.status != STAT_CRC_OK ) {
+            ana_count_rx(0, 0);
             if( log_shallLog(MOD_RAL|DEBUG) ) {
                 log_rawpkt(DEBUG, "", &pkt_rx);
             }

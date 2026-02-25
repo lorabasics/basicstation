@@ -33,6 +33,7 @@
 #include "s2e.h"
 #include "kwcrc.h"
 #include "timesync.h"
+#include "analytics.h"
 
 
 u1_t s2e_dcDisabled;    // no duty cycle limits - override for test/dev
@@ -163,6 +164,7 @@ void s2e_flushRxjobs (s2ctx_t* s2ctx) {
         if( !s2e_parse_lora_frame(&sendbuf, &s2ctx->rxq.rxdata[j->off], j->len, lbuf.buf ? &lbuf : NULL) ) {
             // Frame failed sanity checks or stopped by filters
             sendbuf.pos = 0;
+            ana_count_rx(1, 0);
             continue;
         }
         if( lbuf.buf )
@@ -190,6 +192,8 @@ void s2e_flushRxjobs (s2ctx_t* s2ctx) {
         if( !xeos(&sendbuf) ) {
             LOG(MOD_S2E|ERROR, "JSON encoding exceeds available buffer space: %d", sendbuf.bufsize);
         } else {
+            ana_send_uplink((const struct rxjob*)j, (const struct s2ctx*)s2ctx, &s2ctx->rxq.rxdata[j->off]);
+            ana_count_rx(1, 1);
             (*s2ctx->sendText)(s2ctx, &sendbuf);
             assert(sendbuf.buf==NULL);
         }
@@ -289,6 +293,8 @@ static void send_dntxed (s2ctx_t* s2ctx, txjob_t* txjob) {
         uj_encClose(&sendbuf, '}');
         (*s2ctx->sendText)(s2ctx, &sendbuf);
     }
+    ana_send_downlink((const struct txjob*)txjob, (const struct s2ctx*)s2ctx, &s2ctx->txq.txdata[txjob->off]);
+    ana_count_tx_emitted();
     LOG(MOD_S2E|INFO, "TX %J - %s: %F %.1fdBm ant#%d(%d) DR%d %R frame=%12.4H (%u bytes)",
         txjob, txjob->deveui ? "dntxed" : "on air",
         txjob->freq, (double)txjob->txpow/TXPOW_SCALE,
@@ -1324,6 +1330,8 @@ void handle_dnframe (s2ctx_t* s2ctx, ujdec_t* D) {
     txq_commitJob(&s2ctx->txq, txjob);
     if( !s2e_addTxjob(s2ctx, txjob, /*initial placement*/0, now) )
         txq_freeJob(&s2ctx->txq, txjob);
+    else
+        ana_count_tx_received();
 }
 
 
@@ -1507,6 +1515,8 @@ void handle_dnmsg (s2ctx_t* s2ctx, ujdec_t* D) {
     txq_commitJob(&s2ctx->txq, txjob);
     if( !s2e_addTxjob(s2ctx, txjob, /*initial placement*/0, now) )
         txq_freeJob(&s2ctx->txq, txjob);
+    else
+        ana_count_tx_received();
 }
 
 
