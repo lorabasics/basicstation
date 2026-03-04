@@ -1098,8 +1098,13 @@ static int handle_router_config (s2ctx_t* s2ctx, ujdec_t* D) {
             break;
         }
         case J_bcning: {
-            if( uj_null(D) )
+            if( uj_null(D) ) {
+                // Explicitly disable beaconing
+                rt_clrTimer(&s2ctx->bcntimer);
+                memset(&s2ctx->bcn, 0, sizeof(s2ctx->bcn));
+                LOG(MOD_S2E|INFO, "Beaconing disabled (bcning: null)");
                 break;
+            }
             uj_enterObject(D);
             while( (field = uj_nextField(D)) ) {
                 switch(field) {
@@ -1227,6 +1232,11 @@ static int handle_router_config (s2ctx_t* s2ctx, ujdec_t* D) {
             bcn.layout[0], bcn.layout[1], bcn.layout[2]);
         s2ctx->bcn = bcn;
         s2e_bcntimeout(&s2ctx->bcntimer);
+    } else if( (s2ctx->bcn.ctrl&0xF0) != 0 ) {
+        // bcning field was absent or had no frequencies - stop any ongoing beaconing
+        rt_clrTimer(&s2ctx->bcntimer);
+        memset(&s2ctx->bcn, 0, sizeof(s2ctx->bcn));
+        LOG(MOD_S2E|INFO, "Beaconing disabled (bcning field absent or no frequencies)");
     }
     return 1;
 }
