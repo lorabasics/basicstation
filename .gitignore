@@ -1,0 +1,6 @@
+# build artifacts
+/build-*
+
+# keys and certificates
+*.key
+*.crt

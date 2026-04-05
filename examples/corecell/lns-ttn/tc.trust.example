@@ -1,0 +1,4 @@
+replace the contents of this file with ca.pem
+See: https://www.thethingsindustries.com/docs/concepts/advanced/root-certificates/
+For example: https://www.thethingsindustries.com/docs/concepts/advanced/root-certificates/ca.pem
+Or: https://curl.haxx.se/ca/cacert.pem

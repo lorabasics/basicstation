@@ -68,7 +68,8 @@ cd examples/live-s2.sm.tc
 RADIODEV=/dev/spidev0.0 ../../build-rpi-std/bin/station
 ```
 
-**Note:** The SPI device for the radio MAY be passed as an environment variable using `RADIODEV`.
+> [!NOTE]
+> The SPI device for the radio MAY be passed as an environment variable using `RADIODEV`.
 
 The example configuration connects to a public test server [s2.sm.tc](wss://s2.sm.tc) through which Station fetches all required credentials and a channel plan matching the region as determined from the IP address of the gateway. Provided there are active LoRa devices in proximity, received LoRa frames are printed in the log output on `stderr`.
 
@@ -87,7 +88,11 @@ cd examples/corecell
 
 This example configuration for Corecell connects to [The Things Network](https://www.thethingsnetwork.org/) public LNS. The example [station.conf](station.conf) file holds the required radio configurations and station fetches the channel plan from the configured LNS url ([tc.uri](tc.uri)).
 
-Note: SPI port requires to be activated on Raspberry Pi thanks to [raspi-config](https://www.raspberrypi.org/documentation/configuration/raspi-config.md) tool.
+> [!NOTE]
+> SPI port requires to be activated on Raspberry Pi thanks to [raspi-config](https://www.raspberrypi.org/documentation/configuration/raspi-config.md) tool.
+
+> [!NOTE]
+> You may want to try `make platform=corecell variant=std CC=gcc AR=ar LD=ld` if you have issues with the default clang compiler.
 
 #### PicoCell Gateway (Linux OS as HOST + [SX1308 USB Reference design](https://www.semtech.com/products/wireless-rf/lora-gateways/sx1308p868gw))
 
@@ -101,7 +106,8 @@ cd examples/live-s2.sm.tc
 RADIODEV=/dev/ttyACM0 ../../build-linuxpico-std/bin/station
 ```
 
-**Note:** The serial device for the PicoCell MAY be passed as an environment variable using `RADIODEV`.
+> [!NOTE]
+> The serial device for the PicoCell MAY be passed as an environment variable using `RADIODEV`.
 
 ## Next Steps
 

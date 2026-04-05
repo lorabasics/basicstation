@@ -1003,6 +1003,14 @@ static int handle_router_config (s2ctx_t* s2ctx, ujdec_t* D) {
                 resetDC(s2ctx, 50);      // 2%
                 break;
             }
+            // Added AS923 region variants with different naming conventions
+            // Needed to support "Asia 923-925 (Used by TTN Australia - Secondary Channels)" on TTN
+            // See: https://forum.chirpstack.io/t/downlink-packets-get-dropped-in-the-gateway/14568/5
+            case J_AS923: { // non-std generic naming
+                region = J_AS923_1;
+                region_s = "AS923-1";
+                // FALL THRU
+            }
             case J_AS923JP: { // non-std obsolete naming
                 region = J_AS923_1;
                 region_s = "AS923-1";
