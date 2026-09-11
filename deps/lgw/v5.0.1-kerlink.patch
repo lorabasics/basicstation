@@ -210,7 +210,7 @@ index c0e0ded..14eff6e 100644
          return NMEA_GGA;
      } else {
 diff --git a/libloragw/src/loragw_hal.c b/libloragw/src/loragw_hal.c
-index 8103751..5fdb775 100644
+index 8103751..3c32d65 100644
 --- a/libloragw/src/loragw_hal.c
 +++ b/libloragw/src/loragw_hal.c
 @@ -47,6 +47,8 @@ Maintainer: Sylvain Miermont
@@ -548,7 +548,14 @@ index 8103751..5fdb775 100644
              break;
      }
  
-@@ -812,7 +838,7 @@ int lgw_start(void) {
+@@ -806,13 +832,14 @@ int lgw_start(void) {
+     lgw_reg_w(LGW_FORCE_HOST_RADIO_CTRL, 0); /* gives to AGC MCU the control of the radios */
+     lgw_reg_w(LGW_RADIO_SELECT, cal_cmd); /* send calibration configuration word */
+     lgw_reg_w(LGW_MCU_RST_1, 0);
++    wait_ms(100); /* let the MCU actually come out of reset before reading back its firmware version; without this the check can spuriously fail on some hosts (e.g. Raspberry Pi 4) */
+ 
+     /* Check firmware version */
+     lgw_reg_w(LGW_DBG_AGC_MCU_RAM_ADDR, FW_VERSION_ADDR);
      lgw_reg_r(LGW_DBG_AGC_MCU_RAM_DATA, &read_val);
      fw_version = (uint8_t)read_val;
      if (fw_version != FW_VERSION_CAL) {
@@ -557,7 +564,7 @@ index 8103751..5fdb775 100644
          return -1;
      }
  
-@@ -838,7 +864,7 @@ int lgw_start(void) {
+@@ -838,7 +865,7 @@ int lgw_start(void) {
          bit 6: radio B TX DC Offset correction successful
      */
      if ((cal_status & 0x81) != 0x81) {
@@ -566,7 +573,7 @@ index 8103751..5fdb775 100644
          return LGW_HAL_ERROR;
      } else {
          DEBUG_PRINTF("Note: calibration finished (status = %u)\n", cal_status);
-@@ -883,7 +909,7 @@ int lgw_start(void) {
+@@ -883,7 +910,7 @@ int lgw_start(void) {
  
      /* Sanity check for RX frequency */
      if (rf_rx_freq[0] == 0) {
@@ -575,7 +582,7 @@ index 8103751..5fdb775 100644
          return LGW_HAL_ERROR;
      }
  
-@@ -939,7 +965,7 @@ int lgw_start(void) {
+@@ -939,7 +966,7 @@ int lgw_start(void) {
              case BW_250KHZ: lgw_reg_w(LGW_MBWSSF_MODEM_BW, 1); break;
              case BW_500KHZ: lgw_reg_w(LGW_MBWSSF_MODEM_BW, 2); break;
              default:
@@ -584,7 +591,7 @@ index 8103751..5fdb775 100644
                  return LGW_HAL_ERROR;
          }
          switch(lora_rx_sf) {
-@@ -950,7 +976,7 @@ int lgw_start(void) {
+@@ -950,7 +977,7 @@ int lgw_start(void) {
              case DR_LORA_SF11: lgw_reg_w(LGW_MBWSSF_RATE_SF, 11); break;
              case DR_LORA_SF12: lgw_reg_w(LGW_MBWSSF_RATE_SF, 12); break;
              default:
@@ -593,7 +600,14 @@ index 8103751..5fdb775 100644
                  return LGW_HAL_ERROR;
          }
          lgw_reg_w(LGW_MBWSSF_PPM_OFFSET, lora_rx_ppm_offset); /* default 0 */
-@@ -994,14 +1020,14 @@ int lgw_start(void) {
+@@ -988,20 +1015,21 @@ int lgw_start(void) {
+     lgw_reg_w(LGW_RADIO_SELECT, 0); /* MUST not be = to 1 or 2 at firmware init */
+     lgw_reg_w(LGW_MCU_RST_0, 0);
+     lgw_reg_w(LGW_MCU_RST_1, 0);
++    wait_ms(100); /* let the MCUs actually come out of reset before reading back their firmware version; without this the check can spuriously fail on some hosts (e.g. Raspberry Pi 4) */
+ 
+     /* Check firmware version */
+     lgw_reg_w(LGW_DBG_AGC_MCU_RAM_ADDR, FW_VERSION_ADDR);
      lgw_reg_r(LGW_DBG_AGC_MCU_RAM_DATA, &read_val);
      fw_version = (uint8_t)read_val;
      if (fw_version != FW_VERSION_AGC) {
@@ -610,7 +624,7 @@ index 8103751..5fdb775 100644
          return LGW_HAL_ERROR;
      }
  
-@@ -1010,7 +1036,7 @@ int lgw_start(void) {
+@@ -1010,7 +1038,7 @@ int lgw_start(void) {
  
      lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
      if (read_val != 0x10) {
@@ -619,7 +633,7 @@ index 8103751..5fdb775 100644
          return LGW_HAL_ERROR;
      }
  
-@@ -1023,7 +1049,7 @@ int lgw_start(void) {
+@@ -1023,7 +1051,7 @@ int lgw_start(void) {
          wait_ms(1);
          lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
          if (read_val != (0x30 + i)) {
@@ -628,7 +642,7 @@ index 8103751..5fdb775 100644
              return LGW_HAL_ERROR;
          }
      }
-@@ -1036,7 +1062,7 @@ int lgw_start(void) {
+@@ -1036,7 +1064,7 @@ int lgw_start(void) {
          wait_ms(1);
          lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
          if (read_val != 0x30) {
@@ -637,7 +651,7 @@ index 8103751..5fdb775 100644
              return LGW_HAL_ERROR;
          }
      }
-@@ -1048,7 +1074,7 @@ int lgw_start(void) {
+@@ -1048,7 +1076,7 @@ int lgw_start(void) {
      wait_ms(1);
      lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
      if (read_val != 0x33) {
@@ -646,7 +660,7 @@ index 8103751..5fdb775 100644
          return LGW_HAL_ERROR;
      }
  
-@@ -1059,7 +1085,7 @@ int lgw_start(void) {
+@@ -1059,7 +1087,7 @@ int lgw_start(void) {
      wait_ms(1);
      lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
      if (read_val != 0x30) {
@@ -655,7 +669,7 @@ index 8103751..5fdb775 100644
          return LGW_HAL_ERROR;
      }
  
-@@ -1071,7 +1097,7 @@ int lgw_start(void) {
+@@ -1071,7 +1099,7 @@ int lgw_start(void) {
      DEBUG_MSG("Info: putting back original RADIO_SELECT value\n");
      lgw_reg_r(LGW_MCU_AGC_STATUS, &read_val);
      if (read_val != 0x40) {
@@ -664,7 +678,7 @@ index 8103751..5fdb775 100644
          return LGW_HAL_ERROR;
      }
  
-@@ -1080,7 +1106,7 @@ int lgw_start(void) {
+@@ -1080,7 +1108,7 @@ int lgw_start(void) {
  
      /* */
      if (lbt_is_enabled() == true) {
@@ -673,7 +687,7 @@ index 8103751..5fdb775 100644
          wait_ms(8400);
      }
  
-@@ -1114,13 +1140,13 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
+@@ -1114,13 +1142,13 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
  
      /* check if the concentrator is running */
      if (lgw_is_started == false) {
@@ -689,7 +703,7 @@ index 8103751..5fdb775 100644
          return LGW_HAL_ERROR;
      }
      CHECK_NULL(pkt_data);
-@@ -1247,7 +1273,7 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
+@@ -1247,7 +1275,7 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
                          bw_pow = 4;
                          break;
                      default:
@@ -698,7 +712,7 @@ index 8103751..5fdb775 100644
                          delay_x = 0;
                          bw_pow = 0;
                  }
-@@ -1304,7 +1330,7 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
+@@ -1304,7 +1332,7 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
              /* RSSI correction */
              p->rssi = RSSI_FSK_POLY_0 + RSSI_FSK_POLY_1 * p->rssi + RSSI_FSK_POLY_2 * pow(p->rssi, 2);
          } else {
@@ -707,7 +721,7 @@ index 8103751..5fdb775 100644
              p->status = STAT_UNDEFINED;
              p->modulation = MOD_UNDEFINED;
              p->rssi = -128.0;
-@@ -1347,61 +1373,61 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+@@ -1347,61 +1375,61 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
  
      /* check if the concentrator is running */
      if (lgw_is_started == false) {
@@ -782,7 +796,7 @@ index 8103751..5fdb775 100644
          return LGW_HAL_ERROR;
      }
  
-@@ -1448,10 +1474,15 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+@@ -1448,10 +1476,15 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
              part_frac = ((pkt_data.freq_hz % (SX125x_32MHz_FRAC << 8)) << 8) / SX125x_32MHz_FRAC; /* fractional part, gives middle part and LSB */
              break;
          default:
@@ -799,7 +813,7 @@ index 8103751..5fdb775 100644
      buff[0] = 0xFF & part_int; /* Most Significant Byte */
      buff[1] = 0xFF & (part_frac >> 8); /* middle byte */
      buff[2] = 0xFF & part_frac; /* Least Significant Byte */
-@@ -1482,14 +1513,14 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+@@ -1482,14 +1515,14 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
              case DR_LORA_SF10: buff[9] = 10; break;
              case DR_LORA_SF11: buff[9] = 11; break;
              case DR_LORA_SF12: buff[9] = 12; break;
@@ -816,7 +830,7 @@ index 8103751..5fdb775 100644
          }
          if (pkt_data.no_crc == false) {
              buff[9] |= 0x80; /* set 'CRC enable' bit */
-@@ -1505,7 +1536,7 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+@@ -1505,7 +1538,7 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
              case BW_125KHZ: buff[11] = 0; break;
              case BW_250KHZ: buff[11] = 1; break;
              case BW_500KHZ: buff[11] = 2; break;
@@ -825,7 +839,7 @@ index 8103751..5fdb775 100644
          }
          if (pkt_data.no_header == true) {
              buff[11] |= 0x04; /* set 'implicit header' bit */
-@@ -1582,7 +1613,7 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+@@ -1582,7 +1615,7 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
          buff[0] &= 0x7F; /* Always use narrow band for FSK (force MSB to 0) */
  
      } else {
@@ -834,7 +848,7 @@ index 8103751..5fdb775 100644
          return LGW_HAL_ERROR;
      }
  
-@@ -1600,10 +1631,17 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+@@ -1600,10 +1633,17 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
      lgw_reg_wb(LGW_TX_DATA_BUF_DATA, buff, transfer_size);
      DEBUG_ARRAY(i, transfer_size, buff);
  
@@ -856,7 +870,7 @@ index 8103751..5fdb775 100644
      }
      if (tx_allowed == true) {
          switch(pkt_data.tx_mode) {
-@@ -1620,11 +1658,11 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
+@@ -1620,11 +1660,11 @@ int lgw_send(struct lgw_pkt_tx_s pkt_data) {
                  break;
  
              default:
@@ -870,7 +884,7 @@ index 8103751..5fdb775 100644
          return LGW_LBT_ISSUE;
      }
  
-@@ -1657,7 +1695,7 @@ int lgw_status(uint8_t select, uint8_t *code) {
+@@ -1657,7 +1697,7 @@ int lgw_status(uint8_t select, uint8_t *code) {
          return LGW_HAL_SUCCESS;
  
      } else {
@@ -879,7 +893,7 @@ index 8103751..5fdb775 100644
          return LGW_HAL_ERROR;
      }
  
-@@ -1705,7 +1743,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
+@@ -1705,7 +1745,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
      double Tsym, Tpreamble, Tpayload, Tfsk;
  
      if (packet == NULL) {
@@ -888,7 +902,7 @@ index 8103751..5fdb775 100644
          return 0;
      }
  
-@@ -1715,7 +1753,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
+@@ -1715,7 +1755,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
          if (val != -1) {
              BW = (uint16_t)(val / 1E3);
          } else {
@@ -897,7 +911,7 @@ index 8103751..5fdb775 100644
              return 0;
          }
  
-@@ -1724,7 +1762,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
+@@ -1724,7 +1764,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
          if (val != -1) {
              SF = (uint8_t)val;
          } else {
@@ -906,7 +920,7 @@ index 8103751..5fdb775 100644
              return 0;
          }
  
-@@ -1758,7 +1796,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
+@@ -1758,7 +1798,7 @@ uint32_t lgw_time_on_air(struct lgw_pkt_tx_s *packet) {
          Tpacket = (uint32_t)Tfsk + 1; /* add margin for rounding */
      } else {
          Tpacket = 0;
@@ -938,7 +952,7 @@ index 9c43521..515e9ac 100644
          }
  
 diff --git a/libloragw/src/loragw_radio.c b/libloragw/src/loragw_radio.c
-index b3046a9..a01f65b 100644
+index b3046a9..5cc23f1 100644
 --- a/libloragw/src/loragw_radio.c
 +++ b/libloragw/src/loragw_radio.c
 @@ -46,6 +46,8 @@ Maintainer: Michael Coracin
@@ -950,6 +964,22 @@ index b3046a9..a01f65b 100644
  /* -------------------------------------------------------------------------- */
  /* --- PRIVATE TYPES -------------------------------------------------------- */
  
+@@ -155,6 +157,7 @@ void sx125x_write(uint8_t channel, uint8_t addr, uint8_t data) {
+     lgw_reg_w(reg_add, 0x80 | addr); /* MSB at 1 for write operation */
+     lgw_reg_w(reg_dat, data);
+     lgw_reg_w(reg_cs, 1);
++    wait_ms(1); /* let the SX1301->radio SPI bridge settle before the concluding CS pulse; without this, writes are silently lost on some hosts (e.g. Raspberry Pi 4) */
+     lgw_reg_w(reg_cs, 0);
+ 
+     return;
+@@ -203,6 +206,7 @@ uint8_t sx125x_read(uint8_t channel, uint8_t addr) {
+     lgw_reg_w(reg_dat, 0);
+     lgw_reg_w(reg_cs, 1);
+     lgw_reg_w(reg_cs, 0);
++    wait_ms(1); /* let the SX1301->radio SPI bridge settle before readback; without this, reads are silently wrong (typically 0x00) on some hosts (e.g. Raspberry Pi 4) */
+     lgw_reg_r(reg_rb, &read_value);
+ 
+     return (uint8_t)read_value;
 diff --git a/libloragw/src/loragw_reg.c b/libloragw/src/loragw_reg.c
 index 14e23cd..6d8aab3 100644
 --- a/libloragw/src/loragw_reg.c
